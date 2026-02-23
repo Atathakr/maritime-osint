@@ -22,7 +22,7 @@ OPENSANCTIONS_URL = (
 )
 
 # OFAC SDN XML uses this default namespace on all elements
-OFAC_NS = "http://tempuri.org/sdnList.xsd"
+OFAC_NS = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
