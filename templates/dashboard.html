@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maritime OSINT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="header">
+  <div style="display:flex;align-items:center;">
+    <span class="header-brand">MARITIME OSINT</span>
+    <span class="header-sub">Sanctions &amp; Shadow Fleet Intelligence</span>
+  </div>
+  <div class="header-right">
+    <span id="hdr-total" class="text-muted">—</span>
+    <a href="/logout">Logout</a>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ── Stats row ───────────────────────────────────── -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">OFAC SDN</div>
+      <div class="stat-value accent" id="stat-ofac">—</div>
+      <div class="stat-sub">vessel entries</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">OpenSanctions</div>
+      <div class="stat-value info" id="stat-opensanctions">—</div>
+      <div class="stat-sub">vessel entries</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Vessel Registry</div>
+      <div class="stat-value" id="stat-vessels">—</div>
+      <div class="stat-sub">IMO-identified</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">With IMO</div>
+      <div class="stat-value danger" id="stat-with-imo">—</div>
+      <div class="stat-sub">screenable entries</div>
+    </div>
+  </div>
+
+  <!-- ── Vessel Screening ────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Vessel Screening</span>
+      <span class="text-muted" style="font-size:0.7rem;">IMO number · MMSI · vessel name</span>
+    </div>
+    <div class="panel-body">
+      <div class="screen-row">
+        <input
+          type="text"
+          id="screen-query"
+          class="screen-input"
+          placeholder="e.g.  9876543  ·  123456789  ·  SKIPPER  ·  IMO 9876543"
+          autocomplete="off"
+        >
+        <button class="btn btn-primary" id="screen-btn" onclick="runScreening()">SCREEN</button>
+      </div>
+      <div id="screen-result"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+
+    <!-- ── Sanctions Database ──────────────────────────── -->
+    <div class="panel" style="grid-column: 1 / -1;">
+      <div class="panel-header">
+        <span class="panel-title">Sanctions Database</span>
+        <span id="sanctions-count" class="text-muted" style="font-size:0.72rem;"></span>
+      </div>
+
+      <div class="filter-bar">
+        <input
+          type="text" id="filter-q" class="filter-input"
+          placeholder="Search name or alias…" oninput="debounceLoadSanctions()"
+        >
+        <select id="filter-list" class="filter-select" onchange="loadSanctions()">
+          <option value="">All lists</option>
+          <option value="OFAC_SDN">OFAC SDN</option>
+          <option value="OpenSanctions">OpenSanctions</option>
+        </select>
+        <select id="filter-type" class="filter-select" onchange="loadSanctions()">
+          <option value="">All types</option>
+          <option value="Vessel">Vessel</option>
+          <option value="Individual">Individual</option>
+          <option value="Entity">Entity</option>
+        </select>
+        <input
+          type="text" id="filter-prog" class="filter-input"
+          placeholder="Program (e.g. IRAN, RUSSIA)…" style="min-width:180px;"
+          oninput="debounceLoadSanctions()"
+        >
+      </div>
+
+      <div class="table-wrapper">
+        <table id="sanctions-table">
+          <thead>
+            <tr>
+              <th>List</th>
+              <th>Name</th>
+              <th>IMO</th>
+              <th>MMSI</th>
+              <th>Type</th>
+              <th>Flag</th>
+              <th>Program</th>
+            </tr>
+          </thead>
+          <tbody id="sanctions-tbody">
+            <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <span id="sanctions-page-info"></span>
+        <button class="btn btn-secondary btn-sm" id="sanctions-prev" onclick="changePage(-1)" disabled>← Prev</button>
+        <button class="btn btn-secondary btn-sm" id="sanctions-next" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+
+  </div><!-- .two-col -->
+
+  <!-- ── Data Ingestion ──────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Data Ingestion</span>
+      <span class="text-muted" style="font-size:0.7rem;">Free, no API keys required</span>
+    </div>
+    <div class="panel-body">
+
+      <div class="ingest-row">
+        <div class="ingest-card">
+          <h3>OFAC SDN List</h3>
+          <p>U.S. Treasury Specially Designated Nationals. Direct XML download — vessel, individual &amp; entity entries.</p>
+          <button class="btn btn-primary btn-sm" id="btn-ingest-ofac" onclick="runIngest('ofac')">
+            Fetch OFAC SDN
+          </button>
+        </div>
+        <div class="ingest-card">
+          <h3>OpenSanctions</h3>
+          <p>Consolidated multi-jurisdiction vessel sanctions. CC BY-SA 4.0. Streams from OpenSanctions API — vessel schema only.</p>
+          <button class="btn btn-secondary btn-sm" id="btn-ingest-opensanctions" onclick="runIngest('opensanctions')">
+            Fetch OpenSanctions
+          </button>
+        </div>
+      </div>
+
+      <div id="ingest-status" style="font-size:0.78rem;margin-bottom:0.75rem;"></div>
+
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.4rem;">Recent ingests</div>
+      <ul class="ingest-log-list" id="ingest-log-list">
+        <li><span>—</span></li>
+      </ul>
+    </div>
+  </div>
+
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
