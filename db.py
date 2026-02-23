@@ -217,6 +217,86 @@ def _init_postgres(c) -> None:
         )
     """)
 
+    # ── Session 2: AIS tables ──────────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_positions (
+            id          BIGSERIAL PRIMARY KEY,
+            mmsi        VARCHAR(20) NOT NULL,
+            imo_number  VARCHAR(20),
+            vessel_name VARCHAR(255),
+            vessel_type SMALLINT,
+            lat         DOUBLE PRECISION NOT NULL,
+            lon         DOUBLE PRECISION NOT NULL,
+            sog         REAL,
+            cog         REAL,
+            heading     SMALLINT,
+            nav_status  SMALLINT,
+            source      VARCHAR(20) DEFAULT 'aisstream',
+            position_ts TIMESTAMPTZ NOT NULL,
+            created_at  TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, position_ts)
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_aispos_mmsi   ON ais_positions(mmsi)",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_ts     ON ais_positions(position_ts DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_imo    ON ais_positions(imo_number) WHERE imo_number IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_box    ON ais_positions(lat, lon)",
+    ]:
+        c.execute(idx)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_vessels (
+            mmsi            VARCHAR(20) PRIMARY KEY,
+            imo_number      VARCHAR(20),
+            vessel_name     VARCHAR(255),
+            vessel_type     SMALLINT,
+            call_sign       VARCHAR(50),
+            flag_state      VARCHAR(10),
+            length          REAL,
+            width           REAL,
+            draft           REAL,
+            destination     VARCHAR(255),
+            eta             VARCHAR(50),
+            last_lat        DOUBLE PRECISION,
+            last_lon        DOUBLE PRECISION,
+            last_sog        REAL,
+            last_cog        REAL,
+            last_nav_status SMALLINT,
+            last_seen       TIMESTAMPTZ,
+            first_seen      TIMESTAMPTZ DEFAULT NOW(),
+            sanctions_hit   BOOLEAN DEFAULT FALSE,
+            updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_aisvsl_imo ON ais_vessels(imo_number) WHERE imo_number IS NOT NULL")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS dark_periods (
+            id              SERIAL PRIMARY KEY,
+            mmsi            VARCHAR(20) NOT NULL,
+            imo_number      VARCHAR(20),
+            vessel_name     VARCHAR(255),
+            gap_start       TIMESTAMPTZ NOT NULL,
+            gap_end         TIMESTAMPTZ,
+            gap_hours       REAL,
+            last_lat        DOUBLE PRECISION,
+            last_lon        DOUBLE PRECISION,
+            reappear_lat    DOUBLE PRECISION,
+            reappear_lon    DOUBLE PRECISION,
+            distance_km     REAL,
+            risk_zone       VARCHAR(100),
+            risk_level      VARCHAR(20),
+            sanctions_hit   BOOLEAN DEFAULT FALSE,
+            indicator_code  VARCHAR(10) DEFAULT 'IND1',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, gap_start)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_dark_mmsi ON dark_periods(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_dark_ts   ON dark_periods(gap_start DESC)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -301,6 +381,86 @@ def _init_sqlite(c) -> None:
             completed_at      TEXT DEFAULT (datetime('now'))
         )
     """)
+
+    # ── Session 2: AIS tables ──────────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_positions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi        TEXT NOT NULL,
+            imo_number  TEXT,
+            vessel_name TEXT,
+            vessel_type INTEGER,
+            lat         REAL NOT NULL,
+            lon         REAL NOT NULL,
+            sog         REAL,
+            cog         REAL,
+            heading     INTEGER,
+            nav_status  INTEGER,
+            source      TEXT DEFAULT 'aisstream',
+            position_ts TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, position_ts)
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_aispos_mmsi ON ais_positions(mmsi)",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_ts   ON ais_positions(position_ts DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_imo  ON ais_positions(imo_number)",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_box  ON ais_positions(lat, lon)",
+    ]:
+        c.execute(idx)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_vessels (
+            mmsi            TEXT PRIMARY KEY,
+            imo_number      TEXT,
+            vessel_name     TEXT,
+            vessel_type     INTEGER,
+            call_sign       TEXT,
+            flag_state      TEXT,
+            length          REAL,
+            width           REAL,
+            draft           REAL,
+            destination     TEXT,
+            eta             TEXT,
+            last_lat        REAL,
+            last_lon        REAL,
+            last_sog        REAL,
+            last_cog        REAL,
+            last_nav_status INTEGER,
+            last_seen       TEXT,
+            first_seen      TEXT DEFAULT (datetime('now')),
+            sanctions_hit   INTEGER DEFAULT 0,
+            updated_at      TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_aisvsl_imo ON ais_vessels(imo_number)")
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS dark_periods (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi           TEXT NOT NULL,
+            imo_number     TEXT,
+            vessel_name    TEXT,
+            gap_start      TEXT NOT NULL,
+            gap_end        TEXT,
+            gap_hours      REAL,
+            last_lat       REAL,
+            last_lon       REAL,
+            reappear_lat   REAL,
+            reappear_lon   REAL,
+            distance_km    REAL,
+            risk_zone      TEXT,
+            risk_level     TEXT,
+            sanctions_hit  INTEGER DEFAULT 0,
+            indicator_code TEXT DEFAULT 'IND1',
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, gap_start)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_dark_mmsi ON dark_periods(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_dark_ts   ON dark_periods(gap_start DESC)")
 
 
 # ── Sanctions ─────────────────────────────────────────────────────────────
@@ -669,9 +829,414 @@ def get_stats() -> dict:
             LIMIT 10
         """)
         recent_ingests = _rows(c)
+        # AIS stats (tables may not exist yet in older dbs — handle gracefully)
+        try:
+            c.execute("SELECT COUNT(*) AS n FROM ais_positions")
+            total_ais_positions = _row(c)["n"]
+            c.execute("SELECT COUNT(*) AS n FROM ais_vessels")
+            total_ais_vessels = _row(c)["n"]
+            c.execute("SELECT COUNT(*) AS n FROM dark_periods")
+            total_dark_periods = _row(c)["n"]
+        except Exception:
+            total_ais_positions = total_ais_vessels = total_dark_periods = 0
     return {
-        "total_sanctions": total_sanctions,
-        "total_vessels":   total_vessels,
-        "by_list":         by_list,
-        "recent_ingests":  recent_ingests,
+        "total_sanctions":    total_sanctions,
+        "total_vessels":      total_vessels,
+        "by_list":            by_list,
+        "recent_ingests":     recent_ingests,
+        "total_ais_positions": total_ais_positions,
+        "total_ais_vessels":  total_ais_vessels,
+        "total_dark_periods": total_dark_periods,
     }
+
+
+# ── AIS positions ──────────────────────────────────────────────────────────
+
+def insert_ais_positions(positions: list[dict]) -> int:
+    """Batch-insert AIS positions. Silently skips duplicates. Returns insert count."""
+    if not positions:
+        return 0
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    inserted = 0
+    with _conn() as conn:
+        c = conn.cursor()
+        for pos in positions:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute(f"""
+                        INSERT INTO ais_positions
+                            (mmsi, imo_number, vessel_name, vessel_type,
+                             lat, lon, sog, cog, heading, nav_status, source, position_ts)
+                        VALUES ({_ph(12)})
+                        ON CONFLICT (mmsi, position_ts) DO NOTHING
+                    """, (
+                        pos.get("mmsi"), pos.get("imo_number"), pos.get("vessel_name"),
+                        pos.get("vessel_type"),
+                        pos.get("lat"), pos.get("lon"),
+                        pos.get("sog"), pos.get("cog"), pos.get("heading"),
+                        pos.get("nav_status"), pos.get("source", "aisstream"),
+                        pos.get("position_ts"),
+                    ))
+                    inserted += c.rowcount
+                else:
+                    c.execute(f"""
+                        INSERT OR IGNORE INTO ais_positions
+                            (mmsi, imo_number, vessel_name, vessel_type,
+                             lat, lon, sog, cog, heading, nav_status, source, position_ts)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        pos.get("mmsi"), pos.get("imo_number"), pos.get("vessel_name"),
+                        pos.get("vessel_type"),
+                        pos.get("lat"), pos.get("lon"),
+                        pos.get("sog"), pos.get("cog"), pos.get("heading"),
+                        pos.get("nav_status"), pos.get("source", "aisstream"),
+                        pos.get("position_ts"),
+                    ))
+                    inserted += c.rowcount
+            except Exception:
+                pass
+    return inserted
+
+
+def upsert_ais_vessel(mmsi: str, data: dict) -> None:
+    """Insert or update current vessel state from a ShipStaticData message."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
+    with _conn() as conn:
+        c = conn.cursor()
+        if _BACKEND == "postgres":
+            c.execute(f"""
+                INSERT INTO ais_vessels (mmsi, imo_number, vessel_name, vessel_type,
+                    call_sign, length, width, draft, destination, eta, updated_at)
+                VALUES ({_ph(11)})
+                ON CONFLICT (mmsi) DO UPDATE SET
+                    imo_number  = COALESCE(EXCLUDED.imo_number,  ais_vessels.imo_number),
+                    vessel_name = COALESCE(EXCLUDED.vessel_name, ais_vessels.vessel_name),
+                    vessel_type = COALESCE(EXCLUDED.vessel_type, ais_vessels.vessel_type),
+                    call_sign   = COALESCE(EXCLUDED.call_sign,   ais_vessels.call_sign),
+                    length      = COALESCE(EXCLUDED.length,      ais_vessels.length),
+                    width       = COALESCE(EXCLUDED.width,       ais_vessels.width),
+                    draft       = COALESCE(EXCLUDED.draft,       ais_vessels.draft),
+                    destination = COALESCE(EXCLUDED.destination, ais_vessels.destination),
+                    eta         = COALESCE(EXCLUDED.eta,         ais_vessels.eta),
+                    updated_at  = NOW()
+            """, (
+                mmsi, data.get("imo_number"), data.get("vessel_name"),
+                data.get("vessel_type"), data.get("call_sign"),
+                data.get("length"), data.get("width"), data.get("draft"),
+                data.get("destination"), data.get("eta"), "NOW()",
+            ))
+        else:
+            # SQLite: check-then-update or insert
+            c.execute("SELECT mmsi FROM ais_vessels WHERE mmsi=?", (mmsi,))
+            if c.fetchone():
+                c.execute(f"""
+                    UPDATE ais_vessels SET
+                        imo_number  = COALESCE(?, imo_number),
+                        vessel_name = COALESCE(?, vessel_name),
+                        vessel_type = COALESCE(?, vessel_type),
+                        call_sign   = COALESCE(?, call_sign),
+                        length      = COALESCE(?, length),
+                        width       = COALESCE(?, width),
+                        draft       = COALESCE(?, draft),
+                        destination = COALESCE(?, destination),
+                        eta         = COALESCE(?, eta),
+                        updated_at  = datetime('now')
+                    WHERE mmsi = ?
+                """, (
+                    data.get("imo_number"), data.get("vessel_name"),
+                    data.get("vessel_type"), data.get("call_sign"),
+                    data.get("length"), data.get("width"), data.get("draft"),
+                    data.get("destination"), data.get("eta"), mmsi,
+                ))
+            else:
+                c.execute("""
+                    INSERT OR IGNORE INTO ais_vessels
+                        (mmsi, imo_number, vessel_name, vessel_type, call_sign,
+                         length, width, draft, destination, eta)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    mmsi, data.get("imo_number"), data.get("vessel_name"),
+                    data.get("vessel_type"), data.get("call_sign"),
+                    data.get("length"), data.get("width"), data.get("draft"),
+                    data.get("destination"), data.get("eta"),
+                ))
+
+
+def update_ais_vessel_position(mmsi: str, lat: float, lon: float,
+                                sog: float, cog: float,
+                                nav_status: int, ts: str) -> None:
+    """Update last-seen position on the ais_vessels current-state row."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
+    with _conn() as conn:
+        c = conn.cursor()
+        if _BACKEND == "postgres":
+            c.execute(f"""
+                INSERT INTO ais_vessels (mmsi, last_lat, last_lon, last_sog,
+                    last_cog, last_nav_status, last_seen, updated_at)
+                VALUES ({_ph(8)})
+                ON CONFLICT (mmsi) DO UPDATE SET
+                    last_lat        = EXCLUDED.last_lat,
+                    last_lon        = EXCLUDED.last_lon,
+                    last_sog        = EXCLUDED.last_sog,
+                    last_cog        = EXCLUDED.last_cog,
+                    last_nav_status = EXCLUDED.last_nav_status,
+                    last_seen       = EXCLUDED.last_seen,
+                    updated_at      = NOW()
+            """, (mmsi, lat, lon, sog, cog, nav_status, ts, "NOW()"))
+        else:
+            c.execute("""
+                INSERT INTO ais_vessels (mmsi, last_lat, last_lon, last_sog,
+                    last_cog, last_nav_status, last_seen)
+                VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(mmsi) DO UPDATE SET
+                    last_lat        = excluded.last_lat,
+                    last_lon        = excluded.last_lon,
+                    last_sog        = excluded.last_sog,
+                    last_cog        = excluded.last_cog,
+                    last_nav_status = excluded.last_nav_status,
+                    last_seen       = excluded.last_seen,
+                    updated_at      = datetime('now')
+            """, (mmsi, lat, lon, sog, cog, nav_status, ts))
+
+
+def get_ais_vessels(q: str | None = None, limit: int = 100, offset: int = 0,
+                    sanctioned_only: bool = False) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+    op = "ILIKE" if _BACKEND == "postgres" else "LIKE"
+    if q:
+        clauses.append(f"(vessel_name {op} {p} OR mmsi = {p} OR imo_number = {p})")
+        params.extend([f"%{q}%", q, q])
+    if sanctioned_only:
+        clauses.append(f"sanctions_hit = {p}")
+        params.append(True if _BACKEND == "postgres" else 1)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    null_last = "NULLS LAST" if _BACKEND == "postgres" else ""
+    params.extend([limit, offset])
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT mmsi, imo_number, vessel_name, vessel_type, call_sign,
+                   last_lat, last_lon, last_sog, last_nav_status,
+                   last_seen, sanctions_hit, destination, draft
+            FROM ais_vessels
+            {where}
+            ORDER BY last_seen DESC {null_last}
+            LIMIT {p} OFFSET {p}
+        """, params)
+        return _rows(c)
+
+
+def get_recent_positions(limit: int = 200, mmsi: str | None = None,
+                         hours: int = 24) -> list[dict]:
+    """Return recent AIS positions, optionally filtered to a specific MMSI."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    cutoff_expr = (
+        f"datetime('now', '-{hours} hours')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{hours} hours'"
+    )
+    clauses = [f"position_ts >= {cutoff_expr}"]
+    params: list = []
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    params.append(limit)
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT mmsi, imo_number, vessel_name, vessel_type,
+                   lat, lon, sog, cog, nav_status, source, position_ts
+            FROM ais_positions
+            WHERE {' AND '.join(clauses)}
+            ORDER BY position_ts DESC
+            LIMIT {p}
+        """, params)
+        return _rows(c)
+
+
+# ── Dark period detection ─────────────────────────────────────────────────
+
+def find_ais_gaps(mmsi: str | None = None, min_hours: float = 2.0,
+                  limit: int = 200) -> list[dict]:
+    """
+    Use window functions to find consecutive AIS position gaps > min_hours.
+    Returns list of gap dicts with start/end timestamps and coordinates.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    if _BACKEND == "sqlite":
+        gap_expr  = "(julianday(next_ts) - julianday(position_ts)) * 24"
+    else:
+        gap_expr  = "EXTRACT(EPOCH FROM (next_ts - position_ts)) / 3600"
+
+    mmsi_filter = f"WHERE mmsi = {p}" if mmsi else ""
+    mmsi_params = [mmsi] if mmsi else []
+
+    query = f"""
+        WITH ordered AS (
+            SELECT mmsi, imo_number, vessel_name,
+                   lat, lon, position_ts,
+                   LEAD(position_ts) OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_ts,
+                   LEAD(lat)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lat,
+                   LEAD(lon)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lon
+            FROM ais_positions
+            {mmsi_filter}
+        )
+        SELECT
+            mmsi, imo_number, vessel_name,
+            position_ts  AS gap_start,
+            next_ts      AS gap_end,
+            {gap_expr}   AS gap_hours,
+            lat          AS last_lat,
+            lon          AS last_lon,
+            next_lat     AS reappear_lat,
+            next_lon     AS reappear_lon
+        FROM ordered
+        WHERE next_ts IS NOT NULL
+          AND {gap_expr} >= {p}
+        ORDER BY gap_start DESC
+        LIMIT {p}
+    """
+    params = mmsi_params + [min_hours, limit]
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query, params)
+        return _rows(c)
+
+
+def upsert_dark_periods(periods: list[dict]) -> int:
+    """Persist detected dark periods. Returns count inserted."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    inserted = 0
+    with _conn() as conn:
+        c = conn.cursor()
+        for dp in periods:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute(f"""
+                        INSERT INTO dark_periods (
+                            mmsi, imo_number, vessel_name,
+                            gap_start, gap_end, gap_hours,
+                            last_lat, last_lon, reappear_lat, reappear_lon,
+                            distance_km, risk_zone, risk_level,
+                            sanctions_hit, indicator_code
+                        ) VALUES ({_ph(15)})
+                        ON CONFLICT (mmsi, gap_start) DO UPDATE SET
+                            gap_end      = EXCLUDED.gap_end,
+                            gap_hours    = EXCLUDED.gap_hours,
+                            reappear_lat = EXCLUDED.reappear_lat,
+                            reappear_lon = EXCLUDED.reappear_lon,
+                            risk_zone    = EXCLUDED.risk_zone,
+                            risk_level   = EXCLUDED.risk_level,
+                            sanctions_hit= EXCLUDED.sanctions_hit
+                    """, (
+                        dp.get("mmsi"), dp.get("imo_number"), dp.get("vessel_name"),
+                        dp.get("gap_start"), dp.get("gap_end"), dp.get("gap_hours"),
+                        dp.get("last_lat"), dp.get("last_lon"),
+                        dp.get("reappear_lat"), dp.get("reappear_lon"),
+                        dp.get("distance_km"), dp.get("risk_zone"), dp.get("risk_level"),
+                        dp.get("sanctions_hit", False), dp.get("indicator_code", "IND1"),
+                    ))
+                else:
+                    c.execute("""
+                        INSERT OR REPLACE INTO dark_periods (
+                            mmsi, imo_number, vessel_name,
+                            gap_start, gap_end, gap_hours,
+                            last_lat, last_lon, reappear_lat, reappear_lon,
+                            distance_km, risk_zone, risk_level,
+                            sanctions_hit, indicator_code
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        dp.get("mmsi"), dp.get("imo_number"), dp.get("vessel_name"),
+                        dp.get("gap_start"), dp.get("gap_end"), dp.get("gap_hours"),
+                        dp.get("last_lat"), dp.get("last_lon"),
+                        dp.get("reappear_lat"), dp.get("reappear_lon"),
+                        dp.get("distance_km"), dp.get("risk_zone"), dp.get("risk_level"),
+                        1 if dp.get("sanctions_hit") else 0,
+                        dp.get("indicator_code", "IND1"),
+                    ))
+                inserted += 1
+            except Exception:
+                pass
+    return inserted
+
+
+def get_dark_periods(limit: int = 100, offset: int = 0,
+                     mmsi: str | None = None,
+                     risk_level: str | None = None) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    if risk_level:
+        clauses.append(f"risk_level = {p}")
+        params.append(risk_level)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, mmsi, imo_number, vessel_name,
+                   gap_start, gap_end, gap_hours,
+                   last_lat, last_lon, reappear_lat, reappear_lon,
+                   distance_km, risk_zone, risk_level,
+                   sanctions_hit, indicator_code, created_at
+            FROM dark_periods
+            {where}
+            ORDER BY gap_start DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        rows = _rows(c)
+    # Normalise sanctions_hit to bool for SQLite (stored as 0/1)
+    for r in rows:
+        r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+    return rows
+
+
+def get_ais_positions(mmsi: str | None = None, limit: int = 200,
+                      offset: int = 0) -> list[dict]:
+    """Return AIS positions with optional MMSI filter, newest first."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT mmsi, imo_number, vessel_name, vessel_type,
+                   lat, lon, sog, cog, nav_status, source, position_ts
+            FROM ais_positions
+            {where}
+            ORDER BY position_ts DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        return _rows(c)
+
+
+def get_active_mmsis(days: int = 30) -> list[str]:
+    """Return distinct MMSIs seen within the last N days."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    cutoff_expr = (
+        f"datetime('now', '-{days} days')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{days} days'"
+    )
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute(f"""
+            SELECT DISTINCT mmsi
+            FROM ais_positions
+            WHERE position_ts >= {cutoff_expr}
+            ORDER BY mmsi
+        """)
+        return [row[0] for row in c.fetchall()]

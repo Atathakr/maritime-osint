@@ -13,11 +13,19 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadSanctions();
   loadIngestLog();
+  loadAisStatus();
+  loadAisVessels();
+  loadDarkPeriods();
 
   // Allow Enter key to trigger screening
   document.getElementById('screen-query').addEventListener('keydown', e => {
     if (e.key === 'Enter') runScreening();
   });
+
+  // Auto-refresh AIS status every 15 s
+  setInterval(loadAisStatus,  15_000);
+  // Auto-refresh vessel roster every 30 s
+  setInterval(loadAisVessels, 30_000);
 });
 
 // ── Stats ─────────────────────────────────────────────
@@ -27,15 +35,13 @@ async function loadStats() {
     const data = await apiFetch('/api/stats');
     const by = data.by_list || {};
 
-    setText('stat-ofac',           fmt(by['OFAC_SDN']      || 0));
-    setText('stat-opensanctions',  fmt(by['OpenSanctions'] || 0));
-    setText('stat-vessels',        fmt(data.total_vessels  || 0));
-    setText('stat-with-imo',       fmt((data.by_list
-      ? Object.values(data.by_list).reduce((a, b) => a + b, 0)
-      : data.total_sanctions) || 0));
+    setText('stat-ofac',          fmt(by['OFAC_SDN']           || 0));
+    setText('stat-opensanctions', fmt(by['OpenSanctions']       || 0));
+    setText('stat-ais-vessels',   fmt(data.total_ais_vessels    || 0));
+    setText('stat-dark-periods',  fmt(data.total_dark_periods   || 0));
 
     setText('hdr-total',
-      `${fmt(data.total_sanctions)} entries · ${fmt(data.total_vessels)} vessels`);
+      `${fmt(data.total_sanctions)} sanctions · ${fmt(data.total_ais_vessels || 0)} AIS vessels`);
   } catch (e) {
     console.error('Stats load failed', e);
   }
@@ -277,6 +283,202 @@ async function loadIngestLog() {
     }).join('');
   } catch (e) {
     console.error('Ingest log failed', e);
+  }
+}
+
+// ── AIS Feed ──────────────────────────────────────────
+
+async function loadAisStatus() {
+  try {
+    const s = await apiFetch('/api/ais/status');
+    const badge = document.getElementById('ais-status-badge');
+    const startBtn = document.getElementById('btn-ais-start');
+    const stopBtn  = document.getElementById('btn-ais-stop');
+
+    if (s.running) {
+      badge.textContent = 'LIVE';
+      badge.className = 'badge badge-green';
+      startBtn.disabled = true;
+      stopBtn.disabled  = false;
+    } else {
+      badge.textContent = 'OFFLINE';
+      badge.className = 'badge badge-muted';
+      startBtn.disabled = false;
+      stopBtn.disabled  = true;
+    }
+    setText('ais-msg-rate',   s.msgs_per_min != null ? fmt(Math.round(s.msgs_per_min)) : '—');
+    setText('ais-total-msgs', `${fmt(s.total_messages || 0)} total`);
+  } catch (e) {
+    console.error('AIS status failed', e);
+  }
+}
+
+async function aisStart() {
+  const key = document.getElementById('ais-api-key').value.trim();
+  const btn = document.getElementById('btn-ais-start');
+  btn.disabled = true;
+  btn.innerHTML = 'Connecting… <span class="spinner"></span>';
+  try {
+    const body = key ? { api_key: key } : {};
+    await apiFetch('/api/ais/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    await loadAisStatus();
+  } catch (e) {
+    alert(`AIS start failed: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = 'Connect';
+  }
+}
+
+async function aisStop() {
+  document.getElementById('btn-ais-stop').disabled = true;
+  try {
+    await apiFetch('/api/ais/stop', { method: 'POST' });
+    await loadAisStatus();
+  } catch (e) {
+    console.error('AIS stop failed', e);
+    document.getElementById('btn-ais-stop').disabled = false;
+  }
+}
+
+async function loadAisVessels() {
+  const sanctionedOnly = document.getElementById('ais-sanctioned-only')?.checked;
+  const params = new URLSearchParams({ limit: 200 });
+  if (sanctionedOnly) params.set('sanctioned_only', '1');
+
+  const tbody = document.getElementById('ais-vessels-tbody');
+  try {
+    const rows = await apiFetch(`/api/ais/vessels?${params}`);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No AIS vessels yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const sanctBadge = r.sanctions_hit
+        ? '<span class="badge badge-red" title="Sanctions hit">⚑</span>' : '';
+      const sog = r.last_sog != null ? `${r.last_sog.toFixed(1)} kn` : '—';
+      const lat = r.last_lat != null ? r.last_lat.toFixed(3) : '—';
+      const lon = r.last_lon != null ? r.last_lon.toFixed(3) : '—';
+      const seen = r.last_seen ? new Date(r.last_seen).toLocaleString() : '—';
+      return `<tr onclick="document.getElementById('screen-query').value='${escAttr(r.imo_number||r.mmsi)}';runScreening()" style="cursor:pointer;">
+        <td class="imo">${escHtml(r.mmsi)}</td>
+        <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
+        <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
+        <td>${lat}</td>
+        <td>${lon}</td>
+        <td>${sog}</td>
+        <td class="log-time">${escHtml(seen)}</td>
+        <td>${sanctBadge}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+// ── Dark Periods ──────────────────────────────────────
+
+async function loadDarkPeriods() {
+  const riskFilter = document.getElementById('dark-risk-filter')?.value || '';
+  const params = new URLSearchParams({ limit: 200 });
+  if (riskFilter) params.set('risk_level', riskFilter);
+
+  const tbody = document.getElementById('dark-periods-tbody');
+  try {
+    const rows = await apiFetch(`/api/dark-periods?${params}`);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No dark periods detected yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const riskCls = {
+        CRITICAL: 'badge-red',
+        HIGH:     'badge-red',
+        MEDIUM:   'badge-orange',
+        LOW:      'badge-muted',
+      }[r.risk_level] || 'badge-muted';
+      const sanc = r.sanctions_hit ? '⚑' : '';
+      const dist = r.distance_km != null ? r.distance_km.toFixed(0) : '—';
+      const hrs  = r.gap_hours   != null ? r.gap_hours.toFixed(1)   : '—';
+      const ts   = r.gap_start   ? new Date(r.gap_start).toLocaleString() : '—';
+      return `<tr>
+        <td><span class="badge ${riskCls}">${escHtml(r.risk_level||'')}</span></td>
+        <td class="imo">${escHtml(r.mmsi)}</td>
+        <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
+        <td class="log-time">${escHtml(ts)}</td>
+        <td>${hrs}</td>
+        <td>${dist}</td>
+        <td>${r.risk_zone ? escHtml(r.risk_zone) : '<span class="text-muted">—</span>'}</td>
+        <td style="color:var(--danger)">${sanc}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function runDarkDetect() {
+  const minHours = parseFloat(document.getElementById('dark-min-hours').value || '2');
+  const btn = document.getElementById('btn-detect-dark');
+  const statusEl = document.getElementById('dark-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = '<span class="text-muted">Scanning all active MMSIs…</span>';
+
+  try {
+    const result = await apiFetch('/api/dark-periods/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ min_hours: minHours }),
+    });
+    statusEl.innerHTML =
+      `<span class="text-success">✓ Scanned ${fmt(result.mmsis_scanned||0)} MMSIs — ` +
+      `${fmt(result.total_periods_found||0)} dark periods found</span>`;
+    await Promise.all([loadDarkPeriods(), loadStats()]);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Detection';
+  }
+}
+
+// ── NOAA Ingest ───────────────────────────────────────
+
+async function runNoaaIngest() {
+  const year  = parseInt(document.getElementById('noaa-year').value,  10);
+  const month = parseInt(document.getElementById('noaa-month').value, 10);
+  const zone  = parseInt(document.getElementById('noaa-zone').value,  10);
+  const btn   = document.getElementById('btn-noaa-ingest');
+  const statusEl = document.getElementById('noaa-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Downloading… <span class="spinner"></span>';
+  statusEl.innerHTML = '<span class="text-muted">Fetching NOAA CSV (may take 1–3 min for large zones)…</span>';
+
+  try {
+    const result = await apiFetch('/api/ingest/noaa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, zone }),
+    });
+    if (result.status === 'success') {
+      statusEl.innerHTML =
+        `<span class="text-success">✓ ${fmt(result.rows_inserted||0)} positions inserted ` +
+        `(${fmt(result.rows_processed||0)} rows scanned)</span>`;
+    } else {
+      statusEl.innerHTML = `<span class="text-danger">✗ ${escHtml(result.error||'Unknown error')}</span>`;
+    }
+    await Promise.all([loadAisVessels(), loadStats(), loadIngestLog()]);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Request failed: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load NOAA CSV';
   }
 }
 

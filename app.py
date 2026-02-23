@@ -1,4 +1,4 @@
-"""Flask application — Maritime OSINT Platform (Session 1: Sanctions Foundation)."""
+"""Flask application — Maritime OSINT Platform (Session 1+2: Sanctions + AIS)."""
 
 import os
 import secrets
@@ -13,6 +13,9 @@ from flask import Flask, jsonify, redirect, render_template, request, session, u
 import db
 import ingest
 import screening
+import ais_listener
+import dark_periods
+import noaa_ingest
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
@@ -22,6 +25,11 @@ app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 db.init_db()
 
 APP_PASSWORD = os.getenv("APP_PASSWORD")
+AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
+
+# Auto-start AIS listener if API key is configured
+if AISSTREAM_API_KEY:
+    ais_listener.start(AISSTREAM_API_KEY)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────
@@ -213,6 +221,142 @@ def api_ingest_opensanctions():
 @login_required
 def api_ingest_log():
     return jsonify(db.get_ingest_log())
+
+
+# ── AIS Listener ──────────────────────────────────────────────────────────
+
+@app.post("/api/ais/start")
+@login_required
+def api_ais_start():
+    """Start the AIS WebSocket listener. Requires AISSTREAM_API_KEY in body or env."""
+    data = request.get_json(silent=True) or {}
+    key = data.get("api_key", "").strip() or AISSTREAM_API_KEY
+    if not key:
+        return jsonify({"error": "api_key is required (or set AISSTREAM_API_KEY env var)"}), 400
+    ais_listener.start(key)
+    return jsonify({"status": "started", **ais_listener.get_stats()})
+
+
+@app.post("/api/ais/stop")
+@login_required
+def api_ais_stop():
+    """Stop the AIS WebSocket listener."""
+    ais_listener.stop()
+    return jsonify({"status": "stopped"})
+
+
+@app.get("/api/ais/status")
+@login_required
+def api_ais_status():
+    """Return AIS listener stats."""
+    return jsonify(ais_listener.get_stats())
+
+
+@app.get("/api/ais/positions")
+@login_required
+def api_ais_positions():
+    """
+    Recent AIS positions.
+    Query params: mmsi, limit (max 1000), offset
+    """
+    mmsi = request.args.get("mmsi") or None
+    limit = min(int(request.args.get("limit", 200)), 1000)
+    offset = int(request.args.get("offset", 0))
+    rows = db.get_ais_positions(mmsi=mmsi, limit=limit, offset=offset)
+    return jsonify(rows)
+
+
+@app.get("/api/ais/vessels")
+@login_required
+def api_ais_vessels():
+    """
+    AIS vessel roster (current state — one row per MMSI).
+    Query params: q (name search), limit, offset
+    """
+    rows = db.get_ais_vessels(
+        q=request.args.get("q") or None,
+        limit=min(int(request.args.get("limit", 200)), 1000),
+        offset=int(request.args.get("offset", 0)),
+    )
+    return jsonify(rows)
+
+
+# ── Dark Periods ───────────────────────────────────────────────────────────
+
+@app.post("/api/dark-periods/detect")
+@login_required
+def api_dark_periods_detect():
+    """
+    Run dark-period detection for one MMSI (or all if omitted).
+    Body: {"mmsi": "123456789", "min_hours": 2}
+    """
+    data = request.get_json(silent=True) or {}
+    mmsi = data.get("mmsi") or None
+    min_hours = float(data.get("min_hours", 2.0))
+
+    if mmsi:
+        periods = dark_periods.run_detection(mmsi, min_hours)
+        summary = dark_periods.summarise(periods)
+        return jsonify({"mmsi": mmsi, "periods_found": len(periods), "summary": summary})
+
+    # Bulk: iterate all unique MMSIs seen in the last 30 days
+    all_mmsis = db.get_active_mmsis(days=30)
+    total = 0
+    for m in all_mmsis:
+        found = dark_periods.run_detection(m, min_hours)
+        total += len(found)
+    return jsonify({"mmsis_scanned": len(all_mmsis), "total_periods_found": total})
+
+
+@app.get("/api/dark-periods")
+@login_required
+def api_dark_periods():
+    """
+    List detected dark periods.
+    Query params: mmsi, risk_level (LOW/MEDIUM/HIGH/CRITICAL), limit, offset
+    """
+    rows = db.get_dark_periods(
+        mmsi=request.args.get("mmsi") or None,
+        risk_level=request.args.get("risk_level") or None,
+        limit=min(int(request.args.get("limit", 200)), 1000),
+        offset=int(request.args.get("offset", 0)),
+    )
+    return jsonify(rows)
+
+
+# ── NOAA Ingest ────────────────────────────────────────────────────────────
+
+@app.post("/api/ingest/noaa")
+@login_required
+def api_ingest_noaa():
+    """
+    Bulk-load a NOAA Marine Cadastre monthly AIS CSV.
+    Body: {"year": 2024, "month": 6, "zone": 10, "all_vessel_types": false}
+    Defaults to Zone 10 (Gulf of Mexico), tankers only.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        year  = int(data.get("year",  2024))
+        month = int(data.get("month", 6))
+        zone  = int(data.get("zone",  10))
+        all_types = bool(data.get("all_vessel_types", False))
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Invalid parameters: {exc}"}), 400
+
+    log_id = db.log_ingest_start(f"NOAA_{year}_{month:02d}_zone{zone}")
+    try:
+        result = noaa_ingest.fetch_and_ingest(year, month, zone,
+                                              all_vessel_types=all_types)
+        db.log_ingest_complete(
+            log_id, "success",
+            processed=result.get("rows_processed", 0),
+            inserted=result.get("rows_inserted", 0),
+            updated=0,
+        )
+        return jsonify({"status": "success", **result})
+    except Exception as exc:
+        db.log_ingest_complete(log_id, "error", error=str(exc))
+        return jsonify({"status": "error", "error": str(exc)}), 502
 
 
 # ── Run ───────────────────────────────────────────────────────────────────

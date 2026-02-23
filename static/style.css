@@ -229,6 +229,7 @@ td.flag  { font-size: 0.75rem; }
 .badge-blue   { background: rgba(59,130,246,0.15);  color: var(--info); }
 .badge-orange { background: rgba(249,115,22,0.15);  color: var(--accent); }
 .badge-muted  { background: rgba(107,130,153,0.15); color: var(--muted); }
+.badge-green  { background: rgba(34,197,94,0.15);   color: #22c55e; }
 
 /* ── Filter bar ─────────────────────────────────────── */
 
