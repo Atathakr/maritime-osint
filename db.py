@@ -297,6 +297,34 @@ def _init_postgres(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_dark_mmsi ON dark_periods(mmsi)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_dark_ts   ON dark_periods(gap_start DESC)")
 
+    # ── Session 3: STS events ──────────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sts_events (
+            id              SERIAL PRIMARY KEY,
+            mmsi1           VARCHAR(20) NOT NULL,
+            mmsi2           VARCHAR(20) NOT NULL,
+            vessel_name1    VARCHAR(255),
+            vessel_name2    VARCHAR(255),
+            event_ts        TIMESTAMPTZ NOT NULL,
+            lat             DOUBLE PRECISION,
+            lon             DOUBLE PRECISION,
+            distance_m      REAL,
+            sog1            REAL,
+            sog2            REAL,
+            risk_zone       VARCHAR(100),
+            risk_level      VARCHAR(20),
+            sanctions_hit   BOOLEAN DEFAULT FALSE,
+            indicator_code  VARCHAR(10) DEFAULT 'IND7',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi1, mmsi2, event_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi1 ON sts_events(mmsi1)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi2 ON sts_events(mmsi2)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -461,6 +489,34 @@ def _init_sqlite(c) -> None:
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_dark_mmsi ON dark_periods(mmsi)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_dark_ts   ON dark_periods(gap_start DESC)")
+
+    # ── Session 3: STS events ──────────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sts_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi1          TEXT NOT NULL,
+            mmsi2          TEXT NOT NULL,
+            vessel_name1   TEXT,
+            vessel_name2   TEXT,
+            event_ts       TEXT NOT NULL,
+            lat            REAL,
+            lon            REAL,
+            distance_m     REAL,
+            sog1           REAL,
+            sog2           REAL,
+            risk_zone      TEXT,
+            risk_level     TEXT,
+            sanctions_hit  INTEGER DEFAULT 0,
+            indicator_code TEXT DEFAULT 'IND7',
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi1, mmsi2, event_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi1 ON sts_events(mmsi1)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi2 ON sts_events(mmsi2)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
 
 
 # ── Sanctions ─────────────────────────────────────────────────────────────
@@ -829,7 +885,7 @@ def get_stats() -> dict:
             LIMIT 10
         """)
         recent_ingests = _rows(c)
-        # AIS stats (tables may not exist yet in older dbs — handle gracefully)
+        # AIS + STS stats (tables may not exist in older dbs — handle gracefully)
         try:
             c.execute("SELECT COUNT(*) AS n FROM ais_positions")
             total_ais_positions = _row(c)["n"]
@@ -837,8 +893,10 @@ def get_stats() -> dict:
             total_ais_vessels = _row(c)["n"]
             c.execute("SELECT COUNT(*) AS n FROM dark_periods")
             total_dark_periods = _row(c)["n"]
+            c.execute("SELECT COUNT(*) AS n FROM sts_events")
+            total_sts_events = _row(c)["n"]
         except Exception:
-            total_ais_positions = total_ais_vessels = total_dark_periods = 0
+            total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = 0
     return {
         "total_sanctions":    total_sanctions,
         "total_vessels":      total_vessels,
@@ -847,6 +905,7 @@ def get_stats() -> dict:
         "total_ais_positions": total_ais_positions,
         "total_ais_vessels":  total_ais_vessels,
         "total_dark_periods": total_dark_periods,
+        "total_sts_events":   total_sts_events,
     }
 
 
@@ -1240,3 +1299,158 @@ def get_active_mmsis(days: int = 30) -> list[str]:
             ORDER BY mmsi
         """)
         return [row[0] for row in c.fetchall()]
+
+
+# ── STS event detection ───────────────────────────────────────────────────
+
+def find_sts_candidates(
+    hours_back: int = 48,
+    max_sog: float = 3.0,
+    limit: int = 2000,
+) -> list[dict]:
+    """
+    Bounding-box SQL self-join to find candidate STS pairs.
+    Returns rows with lat1/lon1/lat2/lon2 for Haversine post-filter in Python.
+    Keeps the query light with a 0.05° spatial pre-filter and 30-min temporal window.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    if _BACKEND == "sqlite":
+        cutoff = f"datetime('now', '-{hours_back} hours')"
+        time_diff = "ABS(julianday(a.position_ts) - julianday(b.position_ts)) * 1440"
+    else:
+        cutoff = f"NOW() - INTERVAL '{hours_back} hours'"
+        time_diff = "ABS(EXTRACT(EPOCH FROM (a.position_ts - b.position_ts))) / 60"
+
+    query = f"""
+        SELECT
+            a.mmsi           AS mmsi1,
+            b.mmsi           AS mmsi2,
+            a.vessel_name    AS vessel_name1,
+            b.vessel_name    AS vessel_name2,
+            a.lat  AS lat1,  a.lon  AS lon1,
+            b.lat  AS lat2,  b.lon  AS lon2,
+            a.sog  AS sog1,  b.sog  AS sog2,
+            a.position_ts    AS ts
+        FROM ais_positions a
+        JOIN ais_positions b ON (
+            a.mmsi < b.mmsi
+            AND {time_diff} <= 30
+            AND ABS(a.lat - b.lat) < 0.05
+            AND ABS(a.lon - b.lon) < 0.05
+        )
+        WHERE a.position_ts >= {cutoff}
+          AND (a.sog IS NULL OR a.sog <= {p}
+               OR b.sog IS NULL OR b.sog <= {p})
+        ORDER BY a.position_ts DESC
+        LIMIT {p}
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query, [max_sog, max_sog, limit])
+        return _rows(c)
+
+
+def upsert_sts_events(events: list[dict]) -> int:
+    """Persist STS events. Returns count inserted/updated."""
+    if not events:
+        return 0
+    inserted = 0
+    with _conn() as conn:
+        c = conn.cursor()
+        for ev in events:
+            # Normalise mmsi order so (A,B) and (B,A) collapse to the same row
+            m1, m2 = sorted([str(ev.get("mmsi1", "")), str(ev.get("mmsi2", ""))])
+            try:
+                if _BACKEND == "postgres":
+                    c.execute(f"""
+                        INSERT INTO sts_events (
+                            mmsi1, mmsi2, vessel_name1, vessel_name2,
+                            event_ts, lat, lon, distance_m,
+                            sog1, sog2, risk_zone, risk_level,
+                            sanctions_hit, indicator_code
+                        ) VALUES ({_ph(14)})
+                        ON CONFLICT (mmsi1, mmsi2, event_ts) DO UPDATE SET
+                            vessel_name1 = COALESCE(EXCLUDED.vessel_name1, sts_events.vessel_name1),
+                            vessel_name2 = COALESCE(EXCLUDED.vessel_name2, sts_events.vessel_name2),
+                            distance_m   = EXCLUDED.distance_m,
+                            risk_zone    = EXCLUDED.risk_zone,
+                            risk_level   = EXCLUDED.risk_level,
+                            sanctions_hit= EXCLUDED.sanctions_hit
+                    """, (
+                        m1, m2,
+                        ev.get("vessel_name1"), ev.get("vessel_name2"),
+                        ev.get("event_ts"),
+                        ev.get("lat"), ev.get("lon"),
+                        ev.get("distance_m"),
+                        ev.get("sog1"), ev.get("sog2"),
+                        ev.get("risk_zone"), ev.get("risk_level"),
+                        ev.get("sanctions_hit", False),
+                        ev.get("indicator_code", "IND7"),
+                    ))
+                else:
+                    c.execute("""
+                        INSERT OR REPLACE INTO sts_events (
+                            mmsi1, mmsi2, vessel_name1, vessel_name2,
+                            event_ts, lat, lon, distance_m,
+                            sog1, sog2, risk_zone, risk_level,
+                            sanctions_hit, indicator_code
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        m1, m2,
+                        ev.get("vessel_name1"), ev.get("vessel_name2"),
+                        ev.get("event_ts"),
+                        ev.get("lat"), ev.get("lon"),
+                        ev.get("distance_m"),
+                        ev.get("sog1"), ev.get("sog2"),
+                        ev.get("risk_zone"), ev.get("risk_level"),
+                        1 if ev.get("sanctions_hit") else 0,
+                        ev.get("indicator_code", "IND7"),
+                    ))
+                inserted += 1
+            except Exception:
+                pass
+    return inserted
+
+
+def get_sts_events(
+    limit: int = 200,
+    offset: int = 0,
+    mmsi: str | None = None,
+    risk_level: str | None = None,
+    sanctions_only: bool = False,
+) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+
+    if mmsi:
+        clauses.append(f"(mmsi1 = {p} OR mmsi2 = {p})")
+        params.extend([mmsi, mmsi])
+    if risk_level:
+        clauses.append(f"risk_level = {p}")
+        params.append(risk_level)
+    if sanctions_only:
+        clauses.append(f"sanctions_hit = {p}")
+        params.append(True if _BACKEND == "postgres" else 1)
+
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, mmsi1, mmsi2, vessel_name1, vessel_name2,
+                   event_ts, lat, lon, distance_m,
+                   sog1, sog2, risk_zone, risk_level,
+                   sanctions_hit, indicator_code, created_at
+            FROM sts_events
+            {where}
+            ORDER BY event_ts DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        rows = _rows(c)
+
+    for r in rows:
+        r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+    return rows

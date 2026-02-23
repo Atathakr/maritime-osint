@@ -43,6 +43,11 @@
       <div class="stat-value danger" id="stat-dark-periods">—</div>
       <div class="stat-sub">AIS gap events</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">STS Events</div>
+      <div class="stat-value accent" id="stat-sts-events">—</div>
+      <div class="stat-sub">IND7 — transfers</div>
+    </div>
   </div>
 
   <!-- ── Vessel Screening ────────────────────────────── -->
@@ -227,6 +232,62 @@
           </thead>
           <tbody id="dark-periods-tbody">
             <tr><td colspan="8" class="empty-state">No dark periods detected yet — run detection above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── STS Transfer Events ──────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">STS Transfer Events</span>
+      <span class="text-muted" style="font-size:.7rem;">Indicator 7 — Ship-to-ship transfer at sea</span>
+    </div>
+    <div class="panel-body">
+
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
+        <button class="btn btn-primary btn-sm" id="btn-sts-detect" onclick="runStsDetect()">
+          Run Detection
+        </button>
+        <select id="sts-hours-back" class="filter-select" style="min-width:120px;">
+          <option value="24">Last 24 h</option>
+          <option value="48" selected>Last 48 h</option>
+          <option value="168">Last 7 days</option>
+        </select>
+        <select id="sts-risk-filter" class="filter-select" onchange="loadStsEvents()">
+          <option value="">All risk levels</option>
+          <option value="CRITICAL">CRITICAL</option>
+          <option value="HIGH">HIGH</option>
+          <option value="MEDIUM">MEDIUM</option>
+          <option value="LOW">LOW</option>
+        </select>
+        <label style="font-size:.72rem;margin-left:.25rem;">
+          <input type="checkbox" id="sts-sanctions-only" onchange="loadStsEvents()"> Sanctioned pair only
+        </label>
+        <span id="sts-detect-status" style="font-size:.78rem;"></span>
+      </div>
+
+      <div class="table-wrapper" style="max-height:320px;">
+        <table id="sts-events-table">
+          <thead>
+            <tr>
+              <th>Risk</th>
+              <th>Vessel 1</th>
+              <th>MMSI 1</th>
+              <th>Vessel 2</th>
+              <th>MMSI 2</th>
+              <th>Time (UTC)</th>
+              <th>Dist m</th>
+              <th>SOG 1</th>
+              <th>SOG 2</th>
+              <th>Zone</th>
+              <th>⚑</th>
+            </tr>
+          </thead>
+          <tbody id="sts-events-tbody">
+            <tr><td colspan="11" class="empty-state">No STS events detected yet — run detection above.</td></tr>
           </tbody>
         </table>
       </div>

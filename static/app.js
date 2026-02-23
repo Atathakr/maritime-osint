@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAisStatus();
   loadAisVessels();
   loadDarkPeriods();
+  loadStsEvents();
 
   // Allow Enter key to trigger screening
   document.getElementById('screen-query').addEventListener('keydown', e => {
@@ -39,6 +40,7 @@ async function loadStats() {
     setText('stat-opensanctions', fmt(by['OpenSanctions']       || 0));
     setText('stat-ais-vessels',   fmt(data.total_ais_vessels    || 0));
     setText('stat-dark-periods',  fmt(data.total_dark_periods   || 0));
+    setText('stat-sts-events',    fmt(data.total_sts_events     || 0));
 
     setText('hdr-total',
       `${fmt(data.total_sanctions)} sanctions · ${fmt(data.total_ais_vessels || 0)} AIS vessels`);
@@ -439,6 +441,86 @@ async function runDarkDetect() {
       `<span class="text-success">✓ Scanned ${fmt(result.mmsis_scanned||0)} MMSIs — ` +
       `${fmt(result.total_periods_found||0)} dark periods found</span>`;
     await Promise.all([loadDarkPeriods(), loadStats()]);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Detection';
+  }
+}
+
+// ── STS Events ────────────────────────────────────────
+
+async function loadStsEvents() {
+  const riskFilter    = document.getElementById('sts-risk-filter')?.value    || '';
+  const sanctionsOnly = document.getElementById('sts-sanctions-only')?.checked;
+  const params = new URLSearchParams({ limit: 200 });
+  if (riskFilter)    params.set('risk_level', riskFilter);
+  if (sanctionsOnly) params.set('sanctions_only', '1');
+
+  const tbody = document.getElementById('sts-events-tbody');
+  try {
+    const rows = await apiFetch(`/api/sts/events?${params}`);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No STS events detected yet — run detection above.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const riskCls = {
+        CRITICAL: 'badge-red',
+        HIGH:     'badge-red',
+        MEDIUM:   'badge-orange',
+        LOW:      'badge-muted',
+      }[r.risk_level] || 'badge-muted';
+      const sanc  = r.sanctions_hit ? '<span class="badge badge-red" title="Sanctions hit">⚑</span>' : '';
+      const dist  = r.distance_m != null ? Math.round(r.distance_m) + ' m' : '—';
+      const sog1  = r.sog1 != null ? r.sog1.toFixed(1) + ' kn' : '—';
+      const sog2  = r.sog2 != null ? r.sog2.toFixed(1) + ' kn' : '—';
+      const ts    = r.event_ts ? new Date(r.event_ts).toLocaleString() : '—';
+      const v1    = r.vessel_name1 || r.mmsi1;
+      const v2    = r.vessel_name2 || r.mmsi2;
+      return `<tr>
+        <td><span class="badge ${riskCls}">${escHtml(r.risk_level||'')}</span></td>
+        <td class="name" title="${escAttr(r.vessel_name1||'')}">${escHtml(v1)}</td>
+        <td class="imo">${escHtml(r.mmsi1)}</td>
+        <td class="name" title="${escAttr(r.vessel_name2||'')}">${escHtml(v2)}</td>
+        <td class="imo">${escHtml(r.mmsi2)}</td>
+        <td class="log-time">${escHtml(ts)}</td>
+        <td>${dist}</td>
+        <td>${sog1}</td>
+        <td>${sog2}</td>
+        <td>${r.risk_zone ? escHtml(r.risk_zone) : '<span class="text-muted">—</span>'}</td>
+        <td>${sanc}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="11" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function runStsDetect() {
+  const hoursBack = parseInt(document.getElementById('sts-hours-back').value || '48', 10);
+  const btn       = document.getElementById('btn-sts-detect');
+  const statusEl  = document.getElementById('sts-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = `<span class="text-muted">Scanning last ${hoursBack} h of AIS positions…</span>`;
+
+  try {
+    const result = await apiFetch('/api/sts/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hours_back: hoursBack }),
+    });
+    const s = result.summary || {};
+    const critHigh = (s.CRITICAL || 0) + (s.HIGH || 0);
+    statusEl.innerHTML =
+      `<span class="${critHigh > 0 ? 'text-danger' : 'text-success'}">` +
+      `✓ ${fmt(result.events_found)} events — ` +
+      `${s.CRITICAL||0} CRITICAL · ${s.HIGH||0} HIGH · ${s.MEDIUM||0} MEDIUM · ${s.LOW||0} LOW` +
+      `</span>`;
+    await Promise.all([loadStsEvents(), loadStats()]);
   } catch (e) {
     statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
   } finally {

@@ -16,6 +16,7 @@ import screening
 import ais_listener
 import dark_periods
 import noaa_ingest
+import sts_detection
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
@@ -357,6 +358,53 @@ def api_ingest_noaa():
     except Exception as exc:
         db.log_ingest_complete(log_id, "error", error=str(exc))
         return jsonify({"status": "error", "error": str(exc)}), 502
+
+
+# ── STS Detection ─────────────────────────────────────────────────────────
+
+@app.post("/api/sts/detect")
+@login_required
+def api_sts_detect():
+    """
+    Run STS proximity detection over recent AIS positions.
+    Body (all optional): {"hours_back": 48, "max_distance_km": 0.926, "max_sog": 3.0}
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        hours_back      = int(data.get("hours_back", 48))
+        max_distance_km = float(data.get("max_distance_km", 0.926))
+        max_sog         = float(data.get("max_sog", 3.0))
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Invalid parameters: {exc}"}), 400
+
+    events = sts_detection.run_detection(
+        hours_back=hours_back,
+        max_distance_km=max_distance_km,
+        max_sog=max_sog,
+    )
+    summary = sts_detection.summarise(events)
+    return jsonify({
+        "events_found": len(events),
+        "summary":      summary,
+        "hours_back":   hours_back,
+    })
+
+
+@app.get("/api/sts/events")
+@login_required
+def api_sts_events():
+    """
+    List detected STS events.
+    Query params: mmsi, risk_level, sanctions_only, limit, offset
+    """
+    rows = db.get_sts_events(
+        mmsi=request.args.get("mmsi") or None,
+        risk_level=request.args.get("risk_level") or None,
+        sanctions_only=request.args.get("sanctions_only", "").lower() in ("1", "true"),
+        limit=min(int(request.args.get("limit", 200)), 1000),
+        offset=int(request.args.get("offset", 0)),
+    )
+    return jsonify(rows)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────
