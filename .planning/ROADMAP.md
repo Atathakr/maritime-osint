@@ -15,16 +15,15 @@
 
 ## Phase 2: Identity & UI Integration
 **Goal:** Add identity mismatch detection and surface events in the dashboard.
+**Plans:** 3 plans
 
-- [ ] **P2-1: Identity Mismatch Detection**
-  - Implement `find_imo_conflicts` in `db.py`.
-  - Add `ID_MISMATCH` logic to `spoof_detector.py`.
-- [ ] **P2-2: Dashboard Card**
-  - Update `templates/dashboard.html` with a Spoof Events card.
-  - Add event list rendering to `static/app.js`.
-- [ ] **P2-3: Map Visualization**
-  - Implement map markers for spoof events in `static/map.js`.
-  - Distinguish event types with colors (Red/Orange).
+- [x] phase-2-01-PLAN.md — Identity Mismatch Logic
+- [x] phase-2-02-PLAN.md — Risk Aggregation
+- [x] phase-2-03-PLAN.md — Dashboard & Map UI
+
+- [x] **P2-1: Identity Mismatch Detection**
+- [x] **P2-2: Dashboard Card**
+- [x] **P2-3: Map Visualization**
 
 ## Phase 3: Spatial Analysis (Overland)
 **Goal:** Implement overland detection requiring external dependencies.

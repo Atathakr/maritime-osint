@@ -53,6 +53,7 @@ def get_map_vessels(
     hours: int = 48,
     dp_days: int = 7,
     sts_days: int = 7,
+    spoof_days: int = 7,
     risk_filter: str = "all",
 ) -> list[dict]:
     """
@@ -63,6 +64,7 @@ def get_map_vessels(
     hours       : only include vessels seen in the last N hours
     dp_days     : dark-period look-back window in days
     sts_days    : STS-event look-back window in days
+    spoof_days  : spoofing-event look-back window in days
     risk_filter : "all" | "medium_plus" | "high_plus" | "sanctioned"
 
     Each returned dict has:
@@ -71,25 +73,31 @@ def get_map_vessels(
         destination, call_sign, length, draft,
         sanctioned (bool),
         source_tags (list[str]),
-        dp_risk,     sts_risk           — label strings
+        dp_risk, sts_risk, spoof_risk — label strings
         risk_level  — composite label: CRITICAL/HIGH/MEDIUM/LOW/NONE
         risk_num    — numeric 0-4 (for client-side sorting / filtering)
         risk_colour — hex colour string
         risk_radius — circle radius int
         risk_reasons — list[str] describing contributing factors
     """
-    raw = db.get_map_vessels_raw(hours=hours, dp_days=dp_days, sts_days=sts_days)
+    raw = db.get_map_vessels_raw(
+        hours=hours,
+        dp_days=dp_days,
+        sts_days=sts_days,
+        spoof_days=spoof_days
+    )
 
     results: list[dict] = []
     for r in raw:
         sanctioned   = bool(r.get("sanctioned", 0))
         dp_risk_num  = int(r.get("dp_risk_num",  0))
         sts_risk_num = int(r.get("sts_risk_num", 0))
+        spoof_risk_num = int(r.get("spoof_risk_num", 0))
 
         # Sanctioned vessels are always CRITICAL (num=4)
         sanc_num = 4 if sanctioned else 0
 
-        composite_num = max(sanc_num, dp_risk_num, sts_risk_num)
+        composite_num = max(sanc_num, dp_risk_num, sts_risk_num, spoof_risk_num)
         risk_level    = _NUM_TO_LABEL[composite_num]
 
         # Human-readable reason list
@@ -100,6 +108,9 @@ def get_map_vessels(
             reasons.append(f"Dark period: {_NUM_TO_LABEL[dp_risk_num]}")
         if sts_risk_num > 0:
             reasons.append(f"STS event: {_NUM_TO_LABEL[sts_risk_num]}")
+        if spoof_risk_num > 0:
+            s_types = r.get("spoof_types") or _NUM_TO_LABEL[spoof_risk_num]
+            reasons.append(f"Spoofing: {s_types}")
 
         # Deserialise source_tags (stored as JSON string in DB)
         raw_tags = r.get("source_tags")
@@ -141,6 +152,7 @@ def get_map_vessels(
             "source_tags":  source_tags,
             "dp_risk":      _NUM_TO_LABEL[dp_risk_num],
             "sts_risk":     _NUM_TO_LABEL[sts_risk_num],
+            "spoof_risk":   _NUM_TO_LABEL[spoof_risk_num],
             "risk_level":   risk_level,
             "risk_num":     composite_num,
             "risk_colour":  RISK_COLOURS[risk_level],

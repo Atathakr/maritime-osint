@@ -2133,6 +2133,7 @@ def get_map_vessels_raw(
     hours: int = 48,
     dp_days: int = 7,
     sts_days: int = 7,
+    spoof_days: int = 7,
     limit: int = 1000,
 ) -> list[dict]:
     """
@@ -2152,10 +2153,12 @@ def get_map_vessels_raw(
         av_cutoff  = f"datetime('now', '-{hours} hours')"
         dp_cutoff  = f"datetime('now', '-{dp_days} days')"
         sts_cutoff = f"datetime('now', '-{sts_days} days')"
+        spoof_cutoff = f"datetime('now', '-{spoof_days} days')"
     else:
         av_cutoff  = f"NOW() - INTERVAL '{hours} hours'"
         dp_cutoff  = f"NOW() - INTERVAL '{dp_days} days'"
         sts_cutoff = f"NOW() - INTERVAL '{sts_days} days'"
+        spoof_cutoff = f"NOW() - INTERVAL '{spoof_days} days'"
 
     risk_case = """CASE risk_level
                        WHEN 'CRITICAL' THEN 4
@@ -2163,6 +2166,8 @@ def get_map_vessels_raw(
                        WHEN 'MEDIUM'   THEN 2
                        WHEN 'LOW'      THEN 1
                        ELSE 0 END"""
+
+    agg_func = "GROUP_CONCAT(DISTINCT spoof_type)" if _BACKEND == "sqlite" else "STRING_AGG(DISTINCT spoof_type, ', ')"
 
     query = f"""
         WITH
@@ -2185,6 +2190,15 @@ def get_map_vessels_raw(
         sts_agg AS (
             SELECT mmsi, MAX(rn) AS risk_num
             FROM   sts_side
+            GROUP  BY mmsi
+        ),
+        -- Pre-aggregate spoofing risk per MMSI
+        spoof_agg AS (
+            SELECT mmsi,
+                   MAX({risk_case}) AS risk_num,
+                   {agg_func} AS types
+            FROM   spoof_events
+            WHERE  detected_at >= {spoof_cutoff}
             GROUP  BY mmsi
         )
         SELECT
@@ -2219,10 +2233,13 @@ def get_map_vessels_raw(
                      AND vc2.imo_number = av.imo_number)
              LIMIT 1) AS source_tags,
             COALESCE(dp.risk_num,  0) AS dp_risk_num,
-            COALESCE(sts.risk_num, 0) AS sts_risk_num
+            COALESCE(sts.risk_num, 0) AS sts_risk_num,
+            COALESCE(spoof.risk_num, 0) AS spoof_risk_num,
+            spoof.types AS spoof_types
         FROM  ais_vessels av
         LEFT  JOIN dp_agg  dp  ON dp.mmsi  = av.mmsi
         LEFT  JOIN sts_agg sts ON sts.mmsi = av.mmsi
+        LEFT  JOIN spoof_agg spoof ON spoof.mmsi = av.mmsi
         WHERE av.last_lat  IS NOT NULL
           AND av.last_lon  IS NOT NULL
           AND av.last_seen >= {av_cutoff}
@@ -2235,7 +2252,7 @@ def get_map_vessels_raw(
                        AND av.imo_number != ''
                        AND vc2.imo_number = av.imo_number)
             ) THEN 1 ELSE 0 END DESC,
-            COALESCE(dp.risk_num, 0) + COALESCE(sts.risk_num, 0) DESC
+            COALESCE(dp.risk_num, 0) + COALESCE(sts.risk_num, 0) + COALESCE(spoof.risk_num, 0) DESC
         LIMIT {limit}
     """
 

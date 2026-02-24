@@ -480,6 +480,7 @@ def api_map_vessels():
         hours       = int(request.args.get("hours",       720))
         dp_days     = int(request.args.get("dp_days",      30))
         sts_days    = int(request.args.get("sts_days",     30))
+        spoof_days  = int(request.args.get("spoof_days",   30))
         risk_filter = request.args.get("risk_filter", "medium_plus")
     except (TypeError, ValueError) as exc:
         return jsonify({"error": f"Invalid parameters: {exc}"}), 400
@@ -488,6 +489,7 @@ def api_map_vessels():
         hours=hours,
         dp_days=dp_days,
         sts_days=sts_days,
+        spoof_days=spoof_days,
         risk_filter=risk_filter,
     )
     return jsonify({"vessels": vessels, "count": len(vessels)})
