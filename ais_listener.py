@@ -87,8 +87,8 @@ def _thread_main(api_key: str) -> None:
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_listen_loop(api_key))
-    except Exception as e:
-        logger.error("AIS listener thread crashed: %s", e)
+    except Exception:
+        logger.exception("AIS listener thread crashed")
     finally:
         _stats["connected"] = False
         loop.close()
@@ -245,9 +245,9 @@ def _flush_buffer() -> None:
         n = db.insert_ais_positions(batch)
         _stats["positions_inserted"] += n
         logger.debug("Flushed %d positions (%d inserted)", len(batch), n)
-    except Exception as e:
+    except Exception:
         _stats["errors"] += 1
-        logger.error("Position flush failed: %s", e)
+        logger.exception("Position flush failed")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────

@@ -140,11 +140,11 @@ def _haversine(lat1, lon1, lat2, lon2) -> float | None:
     """Great-circle distance in km between two points."""
     if any(v is None for v in (lat1, lon1, lat2, lon2)):
         return None
-    R = 6371.0
+    r = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = (math.sin(dlat / 2) ** 2
          + math.cos(math.radians(lat1))
          * math.cos(math.radians(lat2))
          * math.sin(dlon / 2) ** 2)
-    return round(R * 2 * math.asin(math.sqrt(a)), 1)
+    return round(r * 2 * math.asin(math.sqrt(a)), 1)

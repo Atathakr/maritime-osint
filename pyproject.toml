@@ -32,7 +32,7 @@ ignore = [
     "T201",   # Print statements
     "COM812", # Missing trailing comma (conflicts with formatter)
     "ISC001", # Single line implicit string concatenation (conflicts with formatter)
-    "ERA001", # Commented out code
+    "ERA001", # Commented out code (falsely flags helpful comments)
     "FIX",    # TODOs
     "TD",     # TODOs
     "SLF001", # Private member access
@@ -43,7 +43,6 @@ ignore = [
     "S110",   # try-except-pass
     "S112",   # try-except-continue
     "ARG",    # Unused arguments
-    "N806",   # Variable name case
     "SIM105", # Use contextlib.suppress
     "RUF002", # Ambiguous characters in docstrings
     "RUF003", # Ambiguous characters in comments
@@ -54,7 +53,6 @@ ignore = [
     "S314",   # xml vulnerability (using standard library xml)
     "RET503", # Missing explicit return (common in before_request)
     "S104",   # Binding to all interfaces (common in dev apps)
-    "TRY400", # Use logging.exception (nice to have, but logging.error is fine)
 ]
 
 [tool.ruff.lint.mccabe]
