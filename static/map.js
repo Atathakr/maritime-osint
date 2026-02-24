@@ -113,7 +113,7 @@
     const trackBtn = v.mmsi 
       ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
            onclick="toggleVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
-           ${v.mmsi === _trackMmsi ? "Hide Track" : "Show 72h Track"}
+           ${v.mmsi === _trackMmsi ? "Hide Track" : "72h history"}
          </button>`
       : "";
 
