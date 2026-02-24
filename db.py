@@ -1743,6 +1743,50 @@ def get_active_mmsis(days: int = 30) -> list[str]:
         return [row[0] for row in c.fetchall()]
 
 
+def find_teleport_candidates(
+    hours_back: int = 48,
+    mmsi: str | None = None,
+    limit: int = 5000
+) -> list[dict]:
+    """
+    Find consecutive AIS positions for vessels within the last N hours.
+    Used for teleportation detection (speed violations).
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    if _BACKEND == "sqlite":
+        cutoff = f"datetime('now', '-{hours_back} hours')"
+    else:
+        cutoff = f"NOW() - INTERVAL '{hours_back} hours'"
+
+    mmsi_filter = f"AND mmsi = {p}" if mmsi else ""
+    mmsi_params = [mmsi] if mmsi else []
+
+    query = f"""
+        WITH ordered AS (
+            SELECT mmsi, imo_number, vessel_name,
+                   lat, lon, position_ts, sog,
+                   LEAD(position_ts) OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_ts,
+                   LEAD(lat)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lat,
+                   LEAD(lon)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lon,
+                   LEAD(sog)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_sog
+            FROM ais_positions
+            WHERE position_ts >= {cutoff}
+            {mmsi_filter}
+        )
+        SELECT *
+        FROM ordered
+        WHERE next_ts IS NOT NULL
+        ORDER BY position_ts DESC
+        LIMIT {p}
+    """
+    params = [*mmsi_params, limit]
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query, params)
+        return _rows(c)
+
+
 # ── STS event detection ───────────────────────────────────────────────────
 
 def find_sts_candidates(
