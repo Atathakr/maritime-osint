@@ -14,6 +14,8 @@
   // ── State ────────────────────────────────────────────────────────────────
   let _map          = null;
   let _markers      = null;   // L.LayerGroup for vessel markers
+  let _trackLayer   = null;   // L.Polyline for active vessel track
+  let _trackMmsi    = null;   // MMSI of the currently loaded track
   let _openSeaLayer = null;
   let _currentFilter = "medium_plus";
   let _refreshTimer  = null;
@@ -107,12 +109,20 @@
     const tags = (v.source_tags || [])
       .map(t => `<span class="badge badge-${tagBadgeClass(t)}" style="font-size:.65rem;">${escHtml(t)}</span>`)
       .join(" ") || "";
+    
+    const trackBtn = v.mmsi 
+      ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
+           onclick="toggleVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
+           ${v.mmsi === _trackMmsi ? "Hide Track" : "72h history"}
+         </button>`
+      : "";
+
     const screenBtn = v.imo_number
-      ? `<button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%;"
+      ? `<button class="btn btn-primary btn-sm" style="margin-top:.25rem;width:100%;"
            onclick="document.getElementById('screen-query').value='${escAttr(v.imo_number)}';runScreening();">
            Screen this vessel
          </button>`
-      : `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
+      : `<button class="btn btn-secondary btn-sm" style="margin-top:.25rem;width:100%;"
            onclick="document.getElementById('screen-query').value='${escAttr(v.mmsi||"")}';runScreening();">
            Screen this vessel (MMSI)
          </button>`;
@@ -131,6 +141,7 @@
       <div style="margin:.4rem 0 .2rem;font-size:.72rem;color:var(--muted);">Risk factors</div>
       <ul class="map-popup-risks">${reasons}</ul>
       ${tags ? `<div style="margin-top:.35rem;">${tags}</div>` : ""}
+      ${trackBtn}
       ${screenBtn}
     </div>`;
   }
@@ -171,6 +182,71 @@
     });
   }
 
+  // ── Track Visualization ──────────────────────────────────────────────────
+  async function toggleVesselTrack(mmsi, name) {
+    // If clicking the same vessel that's already showing, just clear it (toggle off)
+    if (_trackMmsi === mmsi) {
+      clearTrack();
+      return;
+    }
+
+    // Otherwise, clear any existing track and load the new one
+    clearTrack();
+
+    try {
+      const resp = await fetch(`/api/ais/vessels/${mmsi}/track?hours=72`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      
+      if (!data.track || data.track.length < 2) {
+        alert(`No track data found for ${name} in the last 72 hours.`);
+        return;
+      }
+
+      const latlngs = data.track.map(p => [p.lat, p.lon]);
+      _trackLayer = L.polyline(latlngs, {
+        color:       "#3b82f6", // Blue-500
+        weight:      3,
+        opacity:     0.8,
+        dashArray:   "5, 10",
+        lineJoin:    "round"
+      }).addTo(_map);
+
+      _trackMmsi = mmsi;
+      updateTrackButton(true);
+
+      _map.fitBounds(_trackLayer.getBounds(), { padding: [50, 50] });
+      _map.closePopup();
+
+    } catch (err) {
+      console.warn("map: track fetch error", err);
+      alert("Failed to load vessel track.");
+    }
+  }
+
+  function clearTrack() {
+    if (_trackLayer) {
+      _map.removeLayer(_trackLayer);
+      _trackLayer = null;
+    }
+    _trackMmsi = null;
+    updateTrackButton(false);
+  }
+
+  function updateTrackButton(active) {
+    const btn = document.getElementById("btn-clear-track");
+    if (!btn) return;
+    if (active) {
+      btn.textContent = "Hide Track";
+      btn.classList.add("active");
+      btn.disabled = false;
+    } else {
+      btn.textContent = "No Active Track";
+      btn.classList.remove("active");
+      btn.disabled = true;
+    }
+  }
+
   // ── Public API ───────────────────────────────────────────────────────────
   window.initMap = function () {
     if (_map) return;   // already initialised
@@ -197,6 +273,14 @@
 
   window.refreshMap = function () {
     fetchVessels();
+  };
+
+  window.toggleVesselTrack = function (mmsi, name) {
+    toggleVesselTrack(mmsi, name);
+  };
+
+  window.clearTrack = function () {
+    clearTrack();
   };
 
   window.setMapFilter = function (btn) {
