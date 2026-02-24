@@ -18,7 +18,7 @@ IND7 — Ship-to-ship transfer at sea (both vessels slow, close proximity)
 """
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 
 import db
 

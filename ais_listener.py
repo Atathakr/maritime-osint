@@ -15,7 +15,6 @@ WebSocket docs:         https://aisstream.io/documentation
 import asyncio
 import json
 import logging
-import os
 import re
 import threading
 from datetime import datetime, timezone

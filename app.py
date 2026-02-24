@@ -2,23 +2,21 @@
 
 import os
 import secrets
-import threading
-from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
-import db
-import ingest
-import screening
 import ais_listener
 import dark_periods
-import noaa_ingest
-import sts_detection
-import reconcile
+import db
+import ingest
 import map_data
+import noaa_ingest
+import reconcile
+import screening
+import sts_detection
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 

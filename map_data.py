@@ -14,8 +14,8 @@ direct consumption by the Leaflet front-end.
 from __future__ import annotations
 
 import json
-import db
 
+import db
 
 # ── Risk tables ────────────────────────────────────────────────────────────
 
