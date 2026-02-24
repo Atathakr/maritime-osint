@@ -13,6 +13,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
+import normalize
+
 # ── Backend detection ─────────────────────────────────────────────────────
 
 _DB_URL: str = ""
@@ -119,6 +121,11 @@ def _ilike(col: str) -> str:
     return f"{col} {'ILIKE' if _BACKEND == 'postgres' else 'LIKE'} {p}"
 
 
+def _jp() -> str:
+    """JSON-typed parameter placeholder — includes ::jsonb cast for Postgres."""
+    return "%s::jsonb" if _BACKEND == "postgres" else "?"
+
+
 # ── Schema ────────────────────────────────────────────────────────────────
 
 def init_db() -> None:
@@ -216,6 +223,56 @@ def _init_postgres(c) -> None:
             completed_at        TIMESTAMPTZ DEFAULT NOW()
         )
     """)
+
+    # ── Session 4: Canonical vessel registry ──────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS vessels_canonical (
+            canonical_id     VARCHAR(50) PRIMARY KEY,
+            entity_name      VARCHAR(500) NOT NULL,
+            imo_number       VARCHAR(20),
+            mmsi             VARCHAR(20),
+            vessel_type      VARCHAR(100),
+            flag_normalized  VARCHAR(100),
+            aliases          JSONB DEFAULT '[]',
+            source_tags      JSONB DEFAULT '[]',
+            match_method     VARCHAR(20) DEFAULT 'single_source',
+            risk_score       INTEGER DEFAULT 0,
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_vc_imo    ON vessels_canonical(imo_number) WHERE imo_number IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_vc_mmsi   ON vessels_canonical(mmsi)       WHERE mmsi IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_vc_name   ON vessels_canonical(entity_name)",
+        "CREATE INDEX IF NOT EXISTS idx_vc_method ON vessels_canonical(match_method)",
+    ]:
+        c.execute(idx)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sanctions_memberships (
+            id               SERIAL PRIMARY KEY,
+            canonical_id     VARCHAR(50) NOT NULL
+                             REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
+            list_name        VARCHAR(100) NOT NULL,
+            source_id        VARCHAR(100) NOT NULL,
+            entity_type      VARCHAR(50),
+            program          VARCHAR(500),
+            flag_state       VARCHAR(10),
+            call_sign        VARCHAR(50),
+            gross_tonnage    INTEGER,
+            identifiers      JSONB DEFAULT '{}',
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(list_name, source_id)
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_sm_canonical ON sanctions_memberships(canonical_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sm_list      ON sanctions_memberships(list_name)",
+    ]:
+        c.execute(idx)
 
     # ── Session 2: AIS tables ──────────────────────────────────────────────
 
@@ -410,6 +467,55 @@ def _init_sqlite(c) -> None:
         )
     """)
 
+    # ── Session 4: Canonical vessel registry ──────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS vessels_canonical (
+            canonical_id    TEXT PRIMARY KEY,
+            entity_name     TEXT NOT NULL,
+            imo_number      TEXT,
+            mmsi            TEXT,
+            vessel_type     TEXT,
+            flag_normalized TEXT,
+            aliases         TEXT DEFAULT '[]',
+            source_tags     TEXT DEFAULT '[]',
+            match_method    TEXT DEFAULT 'single_source',
+            risk_score      INTEGER DEFAULT 0,
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_vc_imo    ON vessels_canonical(imo_number)",
+        "CREATE INDEX IF NOT EXISTS idx_vc_mmsi   ON vessels_canonical(mmsi)",
+        "CREATE INDEX IF NOT EXISTS idx_vc_name   ON vessels_canonical(entity_name)",
+        "CREATE INDEX IF NOT EXISTS idx_vc_method ON vessels_canonical(match_method)",
+    ]:
+        c.execute(idx)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sanctions_memberships (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_id  TEXT NOT NULL REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
+            list_name     TEXT NOT NULL,
+            source_id     TEXT NOT NULL,
+            entity_type   TEXT,
+            program       TEXT,
+            flag_state    TEXT,
+            call_sign     TEXT,
+            gross_tonnage INTEGER,
+            identifiers   TEXT DEFAULT '{}',
+            created_at    TEXT DEFAULT (datetime('now')),
+            updated_at    TEXT DEFAULT (datetime('now')),
+            UNIQUE(list_name, source_id)
+        )
+    """)
+    for idx in [
+        "CREATE INDEX IF NOT EXISTS idx_sm_canonical ON sanctions_memberships(canonical_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sm_list      ON sanctions_memberships(list_name)",
+    ]:
+        c.execute(idx)
+
     # ── Session 2: AIS tables ──────────────────────────────────────────────
 
     c.execute("""
@@ -519,125 +625,114 @@ def _init_sqlite(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
 
 
-# ── Sanctions ─────────────────────────────────────────────────────────────
+# ── Canonical vessel registry ─────────────────────────────────────────────
 
 def upsert_sanctions_entries(entries: list[dict], list_name: str) -> tuple[int, int]:
     """
-    Bulk upsert sanctions entries keyed on (list_name, source_id).
-    Also syncs IMO-identified vessels into the vessel registry.
-    Returns (inserted, updated).
+    Bulk upsert sanctions entries into vessels_canonical and sanctions_memberships.
+    One canonical row per unique vessel identity; one membership row per source.
+    Returns (canonical_inserted, canonical_updated).
     """
-    inserted = updated = 0
+    p  = "?" if _BACKEND == "sqlite" else "%s"
+    jp = _jp()
+    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
+
+    c_inserted = c_updated = 0
+
     with _conn() as conn:
         c = conn.cursor()
+
         for ent in entries:
-            source_id = ent.get("source_id") or ""
+            source_id = (ent.get("source_id") or "").strip()
             if not source_id:
                 continue
 
-            aliases_str = json.dumps(ent.get("aliases", []))
-            identifiers_str = json.dumps(ent.get("identifiers", {}))
+            imo         = ent.get("imo_number")
+            mmsi        = ent.get("mmsi")
+            name        = (ent.get("entity_name") or "").strip()
+            flag_raw    = ent.get("flag_state")
+            identifiers = ent.get("identifiers") or {}
+            vessel_type = ent.get("vessel_type")
+            entity_type = ent.get("entity_type", "Vessel")
 
+            canonical_id, match_method = normalize.make_canonical_id(imo, mmsi, name, flag_raw)
+            flag_norm  = normalize.normalize_flag(flag_raw)
+            new_tags   = normalize.parse_source_tags(list_name, identifiers)
+            new_aliases = [a for a in (ent.get("aliases") or []) if a and a != name]
+
+            # ── Upsert vessels_canonical (read → merge → write) ───────────
+            c.execute(
+                f"SELECT aliases, source_tags FROM vessels_canonical WHERE canonical_id = {p}",
+                (canonical_id,),
+            )
+            row = c.fetchone()
+
+            if row:
+                ex_aliases = row[0] if not isinstance(row[0], str) else json.loads(row[0] or "[]")
+                ex_tags    = row[1] if not isinstance(row[1], str) else json.loads(row[1] or "[]")
+                merged_aliases = sorted(set((ex_aliases or []) + new_aliases))
+                merged_tags    = sorted(set((ex_tags    or []) + new_tags))
+
+                c.execute(f"""
+                    UPDATE vessels_canonical SET
+                        entity_name     = {p},
+                        imo_number      = COALESCE({p}, imo_number),
+                        mmsi            = COALESCE({p}, mmsi),
+                        vessel_type     = COALESCE({p}, vessel_type),
+                        flag_normalized = COALESCE({p}, flag_normalized),
+                        aliases         = {jp},
+                        source_tags     = {jp},
+                        updated_at      = {now_expr}
+                    WHERE canonical_id = {p}
+                """, (name, imo, mmsi, vessel_type, flag_norm,
+                      json.dumps(merged_aliases), json.dumps(merged_tags),
+                      canonical_id))
+                c_updated += 1
+            else:
+                c.execute(f"""
+                    INSERT INTO vessels_canonical
+                        (canonical_id, entity_name, imo_number, mmsi, vessel_type,
+                         flag_normalized, aliases, source_tags, match_method)
+                    VALUES ({p},{p},{p},{p},{p},{p},{jp},{jp},{p})
+                """, (canonical_id, name, imo, mmsi, vessel_type, flag_norm,
+                      json.dumps(new_aliases), json.dumps(new_tags), match_method))
+                c_inserted += 1
+
+            # ── Upsert sanctions_memberships ──────────────────────────────
+            identifiers_json = json.dumps(identifiers)
             if _BACKEND == "postgres":
                 c.execute("""
-                    INSERT INTO sanctions_entries (
-                        list_name, source_id, entity_type, entity_name,
-                        imo_number, mmsi, vessel_type, flag_state, call_sign,
-                        program, gross_tonnage, aliases, identifiers
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)
+                    INSERT INTO sanctions_memberships
+                        (canonical_id, list_name, source_id, entity_type, program,
+                         flag_state, call_sign, gross_tonnage, identifiers)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
                     ON CONFLICT (list_name, source_id) DO UPDATE SET
-                        entity_type   = EXCLUDED.entity_type,
-                        entity_name   = EXCLUDED.entity_name,
-                        imo_number    = COALESCE(EXCLUDED.imo_number,    sanctions_entries.imo_number),
-                        mmsi          = COALESCE(EXCLUDED.mmsi,          sanctions_entries.mmsi),
-                        vessel_type   = COALESCE(EXCLUDED.vessel_type,   sanctions_entries.vessel_type),
-                        flag_state    = COALESCE(EXCLUDED.flag_state,    sanctions_entries.flag_state),
-                        call_sign     = COALESCE(EXCLUDED.call_sign,     sanctions_entries.call_sign),
+                        canonical_id  = EXCLUDED.canonical_id,
+                        entity_type   = COALESCE(EXCLUDED.entity_type,
+                                                 sanctions_memberships.entity_type),
                         program       = EXCLUDED.program,
-                        gross_tonnage = COALESCE(EXCLUDED.gross_tonnage, sanctions_entries.gross_tonnage),
-                        aliases       = EXCLUDED.aliases,
+                        flag_state    = COALESCE(EXCLUDED.flag_state,
+                                                 sanctions_memberships.flag_state),
+                        call_sign     = COALESCE(EXCLUDED.call_sign,
+                                                 sanctions_memberships.call_sign),
+                        gross_tonnage = COALESCE(EXCLUDED.gross_tonnage,
+                                                 sanctions_memberships.gross_tonnage),
                         identifiers   = EXCLUDED.identifiers,
                         updated_at    = NOW()
-                    RETURNING (xmax = 0) AS is_insert
-                """, (
-                    list_name, source_id,
-                    ent.get("entity_type"), ent.get("entity_name", ""),
-                    ent.get("imo_number"), ent.get("mmsi"),
-                    ent.get("vessel_type"), ent.get("flag_state"),
-                    ent.get("call_sign"), ent.get("program"),
-                    ent.get("gross_tonnage"), aliases_str, identifiers_str,
-                ))
-                row = c.fetchone()
-                if row and row[0]:
-                    inserted += 1
-                else:
-                    updated += 1
+                """, (canonical_id, list_name, source_id, entity_type,
+                      ent.get("program"), flag_raw, ent.get("call_sign"),
+                      ent.get("gross_tonnage"), identifiers_json))
             else:
-                # SQLite: check existence first, then insert-or-replace
-                c.execute(
-                    "SELECT id FROM sanctions_entries WHERE list_name=? AND source_id=?",
-                    (list_name, source_id),
-                )
-                exists = c.fetchone() is not None
                 c.execute("""
-                    INSERT OR REPLACE INTO sanctions_entries (
-                        list_name, source_id, entity_type, entity_name,
-                        imo_number, mmsi, vessel_type, flag_state, call_sign,
-                        program, gross_tonnage, aliases, identifiers
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """, (
-                    list_name, source_id,
-                    ent.get("entity_type"), ent.get("entity_name", ""),
-                    ent.get("imo_number"), ent.get("mmsi"),
-                    ent.get("vessel_type"), ent.get("flag_state"),
-                    ent.get("call_sign"), ent.get("program"),
-                    ent.get("gross_tonnage"), aliases_str, identifiers_str,
-                ))
-                if exists:
-                    updated += 1
-                else:
-                    inserted += 1
+                    INSERT OR REPLACE INTO sanctions_memberships
+                        (canonical_id, list_name, source_id, entity_type, program,
+                         flag_state, call_sign, gross_tonnage, identifiers)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (canonical_id, list_name, source_id, entity_type,
+                      ent.get("program"), flag_raw, ent.get("call_sign"),
+                      ent.get("gross_tonnage"), identifiers_json))
 
-            # Sync to vessel registry if we have an IMO number
-            imo = ent.get("imo_number")
-            if imo:
-                owner = ent.get("identifiers", {}).get("owner_operator")
-                if _BACKEND == "postgres":
-                    c.execute("""
-                        INSERT INTO vessels (
-                            imo_number, mmsi, vessel_name, vessel_type,
-                            flag_state, call_sign, gross_tonnage,
-                            registered_owner, data_source
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON CONFLICT (imo_number) DO UPDATE SET
-                            mmsi          = COALESCE(EXCLUDED.mmsi,          vessels.mmsi),
-                            vessel_name   = COALESCE(EXCLUDED.vessel_name,   vessels.vessel_name),
-                            vessel_type   = COALESCE(EXCLUDED.vessel_type,   vessels.vessel_type),
-                            flag_state    = COALESCE(EXCLUDED.flag_state,    vessels.flag_state),
-                            call_sign     = COALESCE(EXCLUDED.call_sign,     vessels.call_sign),
-                            gross_tonnage = COALESCE(EXCLUDED.gross_tonnage, vessels.gross_tonnage),
-                            updated_at    = NOW()
-                    """, (
-                        imo, ent.get("mmsi"), ent.get("entity_name"),
-                        ent.get("vessel_type"), ent.get("flag_state"),
-                        ent.get("call_sign"), ent.get("gross_tonnage"),
-                        owner, list_name,
-                    ))
-                else:
-                    c.execute("""
-                        INSERT OR IGNORE INTO vessels (
-                            imo_number, mmsi, vessel_name, vessel_type,
-                            flag_state, call_sign, gross_tonnage,
-                            registered_owner, data_source
-                        ) VALUES (?,?,?,?,?,?,?,?,?)
-                    """, (
-                        imo, ent.get("mmsi"), ent.get("entity_name"),
-                        ent.get("vessel_type"), ent.get("flag_state"),
-                        ent.get("call_sign"), ent.get("gross_tonnage"),
-                        owner, list_name,
-                    ))
-
-    return inserted, updated
+    return c_inserted, c_updated
 
 
 def get_sanctions_entries(
@@ -648,23 +743,39 @@ def get_sanctions_entries(
     limit: int = 200,
     offset: int = 0,
 ) -> list[dict]:
+    """
+    Return one row per canonical vessel with aggregated membership info.
+    Filters apply to the underlying memberships via EXISTS subqueries.
+    """
+    p  = "?" if _BACKEND == "sqlite" else "%s"
+    op = "ILIKE" if _BACKEND == "postgres" else "LIKE"
     clauses: list[str] = []
-    params: list = []
-    p = "?" if _BACKEND == "sqlite" else "%s"
+    params:  list      = []
 
     if list_name:
-        clauses.append(f"list_name = {p}")
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM sanctions_memberships sm2 "
+            f"WHERE sm2.canonical_id = vc.canonical_id AND sm2.list_name = {p})"
+        )
         params.append(list_name)
     if program:
-        clauses.append(f"program {'ILIKE' if _BACKEND == 'postgres' else 'LIKE'} {p}")
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM sanctions_memberships sm2 "
+            f"WHERE sm2.canonical_id = vc.canonical_id AND sm2.program {op} {p})"
+        )
         params.append(f"%{program}%")
     if entity_type:
-        clauses.append(f"entity_type = {p}")
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM sanctions_memberships sm2 "
+            f"WHERE sm2.canonical_id = vc.canonical_id AND sm2.entity_type = {p})"
+        )
         params.append(entity_type)
     if q:
-        op = 'ILIKE' if _BACKEND == 'postgres' else 'LIKE'
-        clauses.append(f"(entity_name {op} {p} OR aliases {op} {p})")
-        params.extend([f"%{q}%", f"%{q}%"])
+        clauses.append(
+            f"(vc.entity_name {op} {p} OR vc.aliases {op} {p} "
+            f"OR vc.imo_number = {p} OR vc.mmsi = {p})"
+        )
+        params.extend([f"%{q}%", f"%{q}%", q, q])
 
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     params.extend([limit, offset])
@@ -672,23 +783,48 @@ def get_sanctions_entries(
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(f"""
-            SELECT id, list_name, entity_name, entity_type, imo_number, mmsi,
-                   vessel_type, flag_state, call_sign, program, gross_tonnage,
-                   aliases, identifiers, created_at, updated_at
-            FROM sanctions_entries
+            SELECT
+                vc.canonical_id,
+                vc.entity_name,
+                vc.imo_number,
+                vc.mmsi,
+                vc.vessel_type,
+                vc.flag_normalized  AS flag_state,
+                vc.aliases,
+                vc.source_tags,
+                vc.match_method,
+                vc.created_at,
+                vc.updated_at,
+                COALESCE(
+                    MAX(CASE WHEN sm.list_name = 'OFAC_SDN' THEN sm.program END),
+                    MAX(sm.program)
+                )                   AS program,
+                MAX(sm.gross_tonnage) AS gross_tonnage,
+                MAX(sm.entity_type)   AS entity_type,
+                COUNT(sm.id)          AS membership_count
+            FROM vessels_canonical vc
+            LEFT JOIN sanctions_memberships sm ON sm.canonical_id = vc.canonical_id
             {where}
-            ORDER BY entity_name ASC
+            GROUP BY
+                vc.canonical_id, vc.entity_name, vc.imo_number, vc.mmsi,
+                vc.vessel_type, vc.flag_normalized, vc.aliases, vc.source_tags,
+                vc.match_method, vc.created_at, vc.updated_at
+            ORDER BY vc.entity_name ASC
             LIMIT {p} OFFSET {p}
         """, params)
         rows = _rows(c)
 
-    # Deserialise JSON aliases for SQLite (Postgres returns them as objects already)
     for r in rows:
-        if isinstance(r.get("aliases"), str):
-            try:
-                r["aliases"] = json.loads(r["aliases"])
-            except Exception:
-                r["aliases"] = []
+        for field in ("aliases", "source_tags"):
+            if isinstance(r.get(field), str):
+                try:
+                    r[field] = json.loads(r[field])
+                except Exception:
+                    r[field] = []
+        # Backward-compat: expose first tag as list_name
+        tags = r.get("source_tags") or []
+        r["list_name"] = tags[0] if tags else "Unknown"
+
     return rows
 
 
@@ -697,79 +833,102 @@ def get_sanctions_counts() -> dict:
         c = _cursor(conn)
         c.execute("""
             SELECT list_name,
-                   COUNT(*) AS total,
-                   COUNT(imo_number) AS with_imo
-            FROM sanctions_entries
+                   COUNT(DISTINCT canonical_id) AS n,
+                   COUNT(*) AS entries
+            FROM sanctions_memberships
             GROUP BY list_name
             ORDER BY list_name
         """)
         by_list = _rows(c)
-        c.execute("SELECT COUNT(*) AS n FROM sanctions_entries")
+        c.execute("SELECT COUNT(*) AS n FROM vessels_canonical")
         total = _row(c)["n"]
-        c.execute("SELECT COUNT(*) AS n FROM sanctions_entries WHERE imo_number IS NOT NULL")
+        c.execute("SELECT COUNT(*) AS n FROM vessels_canonical WHERE imo_number IS NOT NULL")
         with_imo = _row(c)["n"]
     return {"total": total, "with_imo": with_imo, "by_list": by_list}
 
 
-# ── Screening queries ─────────────────────────────────────────────────────
+# ── Canonical screening queries ───────────────────────────────────────────
 
-def _screen_query(where_clause: str, params: list) -> list[dict]:
+def _screen_canonical(where_clause: str, params: list) -> list[dict]:
+    """
+    Query vessels_canonical with an arbitrary WHERE clause.
+    Attaches all sanctions_memberships as a sub-list and synthesises
+    backward-compatible fields (list_name, flag_state, program, entity_type).
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(f"""
-            SELECT id, list_name, entity_name, entity_type, imo_number, mmsi,
-                   vessel_type, flag_state, call_sign, program, aliases
-            FROM sanctions_entries
+            SELECT canonical_id, entity_name, imo_number, mmsi, vessel_type,
+                   flag_normalized, aliases, source_tags, match_method, created_at
+            FROM vessels_canonical
             WHERE {where_clause}
-            ORDER BY list_name
         """, params)
-        rows = _rows(c)
-    for r in rows:
-        if isinstance(r.get("aliases"), str):
-            try:
-                r["aliases"] = json.loads(r["aliases"])
-            except Exception:
-                r["aliases"] = []
-    return rows
+        canonicals = _rows(c)
+
+    result = []
+    for can in canonicals:
+        for field in ("aliases", "source_tags"):
+            if isinstance(can.get(field), str):
+                try:
+                    can[field] = json.loads(can[field])
+                except Exception:
+                    can[field] = []
+        memberships = get_vessel_memberships(can["canonical_id"])
+        can["memberships"] = memberships
+
+        # Aggregate program (OFAC preferred)
+        ofac_prog = next(
+            (m["program"] for m in memberships
+             if m.get("list_name") == "OFAC_SDN" and m.get("program")), None
+        )
+        can["program"]     = ofac_prog or next(
+            (m["program"] for m in memberships if m.get("program")), None
+        )
+        # Backward-compat fields
+        can["flag_state"]  = can.get("flag_normalized")
+        can["entity_type"] = next(
+            (m["entity_type"] for m in memberships if m.get("entity_type")), "Vessel"
+        )
+        tags = can.get("source_tags") or []
+        can["list_name"]   = tags[0] if tags else "Unknown"
+        result.append(can)
+    return result
 
 
 def search_sanctions_by_imo(imo: str) -> list[dict]:
     p = "?" if _BACKEND == "sqlite" else "%s"
-    return _screen_query(f"imo_number = {p}", [imo])
+    return _screen_canonical(f"imo_number = {p}", [imo])
 
 
 def search_sanctions_by_mmsi(mmsi: str) -> list[dict]:
     p = "?" if _BACKEND == "sqlite" else "%s"
-    return _screen_query(f"mmsi = {p}", [mmsi])
+    return _screen_canonical(f"mmsi = {p}", [mmsi])
 
 
 def search_sanctions_by_name(name: str, limit: int = 50) -> list[dict]:
-    p = "?" if _BACKEND == "sqlite" else "%s"
+    p  = "?" if _BACKEND == "sqlite" else "%s"
     op = "ILIKE" if _BACKEND == "postgres" else "LIKE"
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(f"""
-            SELECT id, list_name, entity_name, entity_type, imo_number, mmsi,
-                   vessel_type, flag_state, call_sign, program, aliases
-            FROM sanctions_entries
-            WHERE entity_name {op} {p}
-               OR aliases {op} {p}
+            SELECT canonical_id
+            FROM vessels_canonical
+            WHERE entity_name {op} {p} OR aliases {op} {p}
             ORDER BY
                 CASE WHEN entity_name {op} {p} THEN 0 ELSE 1 END,
                 entity_name ASC
             LIMIT {p}
         """, [f"%{name}%", f"%{name}%", f"{name}%", limit])
-        rows = _rows(c)
-    for r in rows:
-        if isinstance(r.get("aliases"), str):
-            try:
-                r["aliases"] = json.loads(r["aliases"])
-            except Exception:
-                r["aliases"] = []
-    return rows
+        ids = [row["canonical_id"] for row in _rows(c)]
+
+    result = []
+    for cid in ids:
+        result.extend(_screen_canonical(f"canonical_id = {p}", [cid]))
+    return result
 
 
-# ── Vessel registry ───────────────────────────────────────────────────────
+# ── Vessel registry (backed by vessels_canonical) ─────────────────────────
 
 def get_vessels(q: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
     p = "?" if _BACKEND == "sqlite" else "%s"
@@ -777,36 +936,238 @@ def get_vessels(q: str | None = None, limit: int = 100, offset: int = 0) -> list
     where = ""
     if q:
         op = "ILIKE" if _BACKEND == "postgres" else "LIKE"
-        where = f"WHERE vessel_name {op} {p} OR imo_number = {p} OR mmsi = {p}"
+        where = (
+            f"WHERE entity_name {op} {p} OR imo_number = {p} OR mmsi = {p}"
+        )
         params = [f"%{q}%", q, q]
     params.extend([limit, offset])
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(f"""
-            SELECT id, imo_number, mmsi, vessel_name, vessel_type, flag_state,
-                   gross_tonnage, year_built, call_sign, registered_owner,
-                   risk_score, data_source, created_at, updated_at
-            FROM vessels
+            SELECT canonical_id, entity_name AS vessel_name, imo_number, mmsi,
+                   vessel_type, flag_normalized AS flag_state,
+                   source_tags, match_method, risk_score, created_at, updated_at
+            FROM vessels_canonical
             {where}
-            ORDER BY vessel_name ASC
+            ORDER BY entity_name ASC
             LIMIT {p} OFFSET {p}
         """, params)
-        return _rows(c)
+        rows = _rows(c)
+    for r in rows:
+        if isinstance(r.get("source_tags"), str):
+            try:
+                r["source_tags"] = json.loads(r["source_tags"])
+            except Exception:
+                r["source_tags"] = []
+    return rows
 
 
 def get_vessel(imo: str) -> dict | None:
     p = "?" if _BACKEND == "sqlite" else "%s"
     with _conn() as conn:
         c = _cursor(conn)
-        c.execute(f"SELECT * FROM vessels WHERE imo_number = {p}", (imo,))
-        return _row(c)
+        c.execute(
+            f"SELECT * FROM vessels_canonical WHERE imo_number = {p}", (imo,)
+        )
+        r = _row(c)
+    if r:
+        for field in ("aliases", "source_tags"):
+            if isinstance(r.get(field), str):
+                try:
+                    r[field] = json.loads(r[field])
+                except Exception:
+                    r[field] = []
+    return r
 
 
 def get_vessel_count() -> int:
     with _conn() as conn:
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM vessels")
+        c.execute("SELECT COUNT(*) FROM vessels_canonical")
         return c.fetchone()[0]
+
+
+# ── Vessel membership detail (for profiles + reconciliation) ──────────────
+
+def get_vessel_memberships(canonical_id: str) -> list[dict]:
+    """
+    Return all sanctions-list memberships for one canonical vessel.
+    Used by screening (detail), vessel profiles, and reconciliation.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, canonical_id, list_name, source_id, entity_type,
+                   program, flag_state, call_sign, gross_tonnage,
+                   identifiers, created_at, updated_at
+            FROM sanctions_memberships
+            WHERE canonical_id = {p}
+            ORDER BY list_name ASC
+        """, (canonical_id,))
+        rows = _rows(c)
+    for r in rows:
+        if isinstance(r.get("identifiers"), str):
+            try:
+                r["identifiers"] = json.loads(r["identifiers"])
+            except Exception:
+                r["identifiers"] = {}
+    return rows
+
+
+# ── Reconciliation helpers ────────────────────────────────────────────────
+
+def find_mmsi_imo_collisions() -> list[tuple[str, str]]:
+    """
+    Tier 2: find MMSI-keyed canonicals whose MMSI value also appears in
+    an IMO-keyed canonical.  Returns list of (mmsi_canonical_id, imo_canonical_id).
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT a.canonical_id AS mmsi_cid,
+                   b.canonical_id AS imo_cid
+            FROM vessels_canonical a
+            JOIN vessels_canonical b
+                ON a.mmsi IS NOT NULL
+               AND a.mmsi = b.mmsi
+               AND a.canonical_id != b.canonical_id
+            WHERE a.match_method = 'mmsi_exact'
+              AND b.match_method = 'imo_exact'
+        """)
+        return [(r["mmsi_cid"], r["imo_cid"]) for r in _rows(c)]
+
+
+def find_imo_collisions() -> list[tuple[str, list[str]]]:
+    """
+    Tier 1 safety sweep: find multiple canonicals with the same imo_number.
+    Returns list of (imo_number, [canonical_id, ...]).
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute("""
+            SELECT imo_number, COUNT(*) AS n
+            FROM vessels_canonical
+            WHERE imo_number IS NOT NULL
+            GROUP BY imo_number
+            HAVING COUNT(*) > 1
+        """)
+        dupes = _rows(c)
+
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    result = []
+    for d in dupes:
+        imo = d["imo_number"]
+        with _conn() as conn:
+            c = _cursor(conn)
+            c.execute(
+                f"SELECT canonical_id FROM vessels_canonical WHERE imo_number = {p}",
+                (imo,),
+            )
+            cids = [r["canonical_id"] for r in _rows(c)]
+        result.append((imo, cids))
+    return result
+
+
+def merge_canonical(source_id: str, target_id: str) -> None:
+    """
+    Merge the source canonical into the target canonical:
+      1. Reassign all memberships from source → target.
+      2. Merge aliases + source_tags onto target.
+      3. Promote imo_number / mmsi if source has them and target doesn't.
+      4. Delete source canonical.
+    """
+    p        = "?" if _BACKEND == "sqlite" else "%s"
+    jp       = _jp()
+    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
+
+    with _conn() as conn:
+        c = _cursor(conn)
+
+        c.execute(
+            f"SELECT aliases, source_tags, imo_number, mmsi "
+            f"FROM vessels_canonical WHERE canonical_id = {p}",
+            (source_id,),
+        )
+        src = _row(c)
+        c.execute(
+            f"SELECT aliases, source_tags, imo_number, mmsi "
+            f"FROM vessels_canonical WHERE canonical_id = {p}",
+            (target_id,),
+        )
+        tgt = _row(c)
+        if not src or not tgt:
+            return
+
+        def _parse(val):
+            if isinstance(val, str):
+                try:
+                    return json.loads(val)
+                except Exception:
+                    return []
+            return val or []
+
+        merged_aliases = sorted(set(_parse(tgt["aliases"]) + _parse(src["aliases"])))
+        merged_tags    = sorted(set(_parse(tgt["source_tags"]) + _parse(src["source_tags"])))
+
+        # Reassign memberships
+        c.execute(
+            f"UPDATE sanctions_memberships SET canonical_id = {p} WHERE canonical_id = {p}",
+            (target_id, source_id),
+        )
+        # Merge metadata onto target
+        c.execute(f"""
+            UPDATE vessels_canonical SET
+                imo_number  = COALESCE(imo_number,  {p}),
+                mmsi        = COALESCE(mmsi,        {p}),
+                aliases     = {jp},
+                source_tags = {jp},
+                updated_at  = {now_expr}
+            WHERE canonical_id = {p}
+        """, (src["imo_number"], src["mmsi"],
+              json.dumps(merged_aliases), json.dumps(merged_tags),
+              target_id))
+        # Delete source
+        c.execute(
+            f"DELETE FROM vessels_canonical WHERE canonical_id = {p}",
+            (source_id,),
+        )
+
+
+def rebuild_all_source_tags() -> None:
+    """
+    Recompute source_tags on every vessels_canonical row from its memberships.
+    Run after a reconciliation pass to ensure consistency.
+    """
+    p        = "?" if _BACKEND == "sqlite" else "%s"
+    jp       = _jp()
+    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
+
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute("SELECT canonical_id FROM vessels_canonical")
+        cids = [r["canonical_id"] for r in _rows(c)]
+
+    for cid in cids:
+        memberships = get_vessel_memberships(cid)
+        tags: list[str] = []
+        for m in memberships:
+            identifiers = m.get("identifiers") or {}
+            new_tags = normalize.parse_source_tags(
+                m["list_name"], identifiers
+            )
+            for t in new_tags:
+                if t not in tags:
+                    tags.append(t)
+        tags.sort()
+
+        with _conn() as conn:
+            c = conn.cursor()
+            c.execute(f"""
+                UPDATE vessels_canonical SET source_tags = {jp}, updated_at = {now_expr}
+                WHERE canonical_id = {p}
+            """, (json.dumps(tags), cid))
 
 
 # ── Ingest log ────────────────────────────────────────────────────────────
@@ -867,17 +1228,26 @@ def get_ingest_log(limit: int = 20) -> list[dict]:
 def get_stats() -> dict:
     with _conn() as conn:
         c = _cursor(conn)
-        c.execute("SELECT COUNT(*) AS n FROM sanctions_entries")
-        total_sanctions = _row(c)["n"]
-        c.execute("SELECT COUNT(*) AS n FROM vessels")
-        total_vessels = _row(c)["n"]
-        c.execute("""
-            SELECT list_name, COUNT(*) AS n
-            FROM sanctions_entries
-            GROUP BY list_name
-            ORDER BY list_name
-        """)
-        by_list = {r["list_name"]: r["n"] for r in _rows(c)}
+
+        # Unique canonical vessels (the headline number)
+        try:
+            c.execute("SELECT COUNT(*) AS n FROM vessels_canonical")
+            total_sanctions = _row(c)["n"]
+        except Exception:
+            total_sanctions = 0
+
+        # Per-list counts from memberships (distinct canonical vessels per list)
+        try:
+            c.execute("""
+                SELECT list_name, COUNT(DISTINCT canonical_id) AS n
+                FROM sanctions_memberships
+                GROUP BY list_name
+                ORDER BY list_name
+            """)
+            by_list = {r["list_name"]: r["n"] for r in _rows(c)}
+        except Exception:
+            by_list = {}
+
         c.execute("""
             SELECT source_name, status, records_inserted, completed_at
             FROM ingest_log
@@ -885,7 +1255,8 @@ def get_stats() -> dict:
             LIMIT 10
         """)
         recent_ingests = _rows(c)
-        # AIS + STS stats (tables may not exist in older dbs — handle gracefully)
+
+        # AIS + detection stats (tables may not exist in older dbs)
         try:
             c.execute("SELECT COUNT(*) AS n FROM ais_positions")
             total_ais_positions = _row(c)["n"]
@@ -897,15 +1268,16 @@ def get_stats() -> dict:
             total_sts_events = _row(c)["n"]
         except Exception:
             total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = 0
+
     return {
-        "total_sanctions":    total_sanctions,
-        "total_vessels":      total_vessels,
-        "by_list":            by_list,
-        "recent_ingests":     recent_ingests,
+        "total_sanctions":     total_sanctions,
+        "total_vessels":       total_sanctions,   # backward compat alias
+        "by_list":             by_list,
+        "recent_ingests":      recent_ingests,
         "total_ais_positions": total_ais_positions,
-        "total_ais_vessels":  total_ais_vessels,
-        "total_dark_periods": total_dark_periods,
-        "total_sts_events":   total_sts_events,
+        "total_ais_vessels":   total_ais_vessels,
+        "total_dark_periods":  total_dark_periods,
+        "total_sts_events":    total_sts_events,
     }
 
 

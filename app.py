@@ -1,4 +1,4 @@
-"""Flask application — Maritime OSINT Platform (Session 1+2: Sanctions + AIS)."""
+"""Flask application — Maritime OSINT Platform (Sessions 1–4: Sanctions + AIS + Reconciliation)."""
 
 import os
 import secrets
@@ -17,6 +17,7 @@ import ais_listener
 import dark_periods
 import noaa_ingest
 import sts_detection
+import reconcile
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
@@ -405,6 +406,32 @@ def api_sts_events():
         offset=int(request.args.get("offset", 0)),
     )
     return jsonify(rows)
+
+
+# ── Reconciliation ────────────────────────────────────────────────────────
+
+@app.post("/api/reconcile")
+@login_required
+def api_reconcile():
+    """
+    Run post-ingest canonical reconciliation passes.
+
+    Tier 1 — IMO safety sweep: collapses any duplicate canonical records
+              that share the same IMO number (should not normally occur, but
+              guards against edge cases in upstream data).
+
+    Tier 2 — MMSI→IMO merge: finds MMSI-keyed canonicals whose MMSI value
+              also appears in an IMO-keyed canonical, then merges them so the
+              stronger identifier (IMO) wins.
+
+    Returns a summary:
+      {"tier1_imo_merges": N, "tier2_mmsi_merges": N}
+    """
+    try:
+        summary = reconcile.run_reconciliation()
+        return jsonify({"status": "success", **summary})
+    except Exception as exc:
+        return jsonify({"status": "error", "error": str(exc)}), 502
 
 
 # ── Run ───────────────────────────────────────────────────────────────────

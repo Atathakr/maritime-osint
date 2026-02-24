@@ -356,6 +356,14 @@
             Fetch OpenSanctions
           </button>
         </div>
+        <div class="ingest-card">
+          <h3>Reconcile</h3>
+          <p>Merge duplicate canonical records after a fresh ingest. Detects IMO collisions (Tier 1) and MMSI→IMO overlaps (Tier 2). Run after both sources are loaded.</p>
+          <button class="btn btn-secondary btn-sm" id="btn-reconcile" onclick="runReconcile()">
+            Reconcile
+          </button>
+          <div id="reconcile-status" style="font-size:.78rem;margin-top:.5rem;"></div>
+        </div>
       </div>
 
       <div id="ingest-status" style="font-size:0.78rem;margin-bottom:0.75rem;"></div>

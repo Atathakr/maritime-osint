@@ -3,6 +3,15 @@ Vessel screening module — query sanctions lists by IMO, MMSI, or name.
 
 Screening is the core Session 1 deliverable: given any vessel identifier,
 return all matching sanctions entries with confidence metadata.
+
+Session 4 update: hits now come from vessels_canonical (one row per unique
+vessel) with attached memberships list for data lineage.  Each hit includes:
+  - canonical_id, entity_name, imo_number, mmsi, vessel_type, flag_state
+  - source_tags     — ordered list of sanctions list display labels
+                      e.g. ["OFAC SDN", "EU", "UN SC"]
+  - memberships     — full list of per-source membership rows (for profiles)
+  - match_method    — how the canonical record was identified
+  - match_confidence — human-readable screening confidence label (added here)
 """
 
 import re
@@ -36,6 +45,40 @@ def _detect_query_type(query: str) -> str:
     return "name"
 
 
+def _annotate_hit(hit: dict, query_type: str) -> None:
+    """
+    Annotate a single hit dict in-place:
+      • match_confidence  — human-readable confidence label
+      • Deserialise JSON string fields (aliases, source_tags) if needed
+      • Guarantee source_tags is always a list (never None)
+    """
+    # Confidence label
+    if hit.get("imo_number") and query_type == "imo":
+        hit["match_confidence"] = "HIGH — exact IMO match"
+    elif hit.get("mmsi") and query_type == "mmsi":
+        hit["match_confidence"] = "HIGH — exact MMSI match"
+    else:
+        hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
+
+    # Deserialise any JSON fields that may arrive as strings (SQLite path)
+    import json
+    for field in ("aliases", "source_tags"):
+        val = hit.get(field)
+        if isinstance(val, str):
+            try:
+                hit[field] = json.loads(val)
+            except Exception:
+                hit[field] = []
+
+    # Ensure source_tags is never None or missing — JS rendering depends on it
+    if not hit.get("source_tags"):
+        hit["source_tags"] = []
+
+    # Ensure memberships is always a list
+    if not isinstance(hit.get("memberships"), list):
+        hit["memberships"] = []
+
+
 def screen(query: str) -> dict:
     """
     Screen a vessel against all loaded sanctions lists.
@@ -49,7 +92,12 @@ def screen(query: str) -> dict:
       - query, query_type
       - sanctioned (bool)
       - total_hits (int)
-      - hits (list of sanitized sanctions entry dicts)
+      - hits (list of canonical vessel dicts), each containing:
+          canonical_id, entity_name, imo_number, mmsi, vessel_type, flag_state,
+          source_tags    — list of display labels, e.g. ["OFAC SDN", "EU", "UN SC"]
+          memberships    — per-source rows for data lineage (future profile use)
+          match_method   — "imo_exact" | "mmsi_exact" | "single_source"
+          match_confidence — human-readable label added by this function
     """
     query = query.strip()
     if not query:
@@ -75,54 +123,65 @@ def screen(query: str) -> dict:
             hits = fallback
             query_type = f"{query_type}_name_fallback"
 
-    # Annotate each hit with a plain-language confidence label
     for hit in hits:
-        if hit.get("imo_number") and query_type == "imo":
-            hit["match_confidence"] = "HIGH — exact IMO match"
-        elif hit.get("mmsi") and query_type == "mmsi":
-            hit["match_confidence"] = "HIGH — exact MMSI match"
-        else:
-            hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
-
-        # Deserialise JSONB aliases for display
-        aliases = hit.get("aliases")
-        if isinstance(aliases, str):
-            try:
-                hit["aliases"] = __import__("json").loads(aliases)
-            except Exception:
-                hit["aliases"] = []
+        _annotate_hit(hit, query_type)
 
     return {
-        "query":        query,
-        "query_type":   query_type,
-        "sanctioned":   len(hits) > 0,
-        "total_hits":   len(hits),
-        "hits":         hits,
+        "query":      query,
+        "query_type": query_type,
+        "sanctioned": len(hits) > 0,
+        "total_hits": len(hits),
+        "hits":       hits,
     }
 
 
 def screen_vessel_detail(imo: str) -> dict:
     """
     Full screening report for a known vessel (by IMO).
-    Fetches vessel registry record plus all sanctions list appearances.
+    Fetches the canonical vessel record plus all sanctions list memberships.
+
+    Returns:
+      - vessel        — canonical vessel record (from vessels_canonical)
+      - sanctions_hits — list of canonical hit dicts (typically one for IMO lookup),
+                         each with attached memberships for data lineage
+      - source_tags   — merged, de-duplicated list of all sanctioning bodies
+      - total_memberships — total count of individual list entries across all hits
+      - risk_factors  — human-readable risk indicator strings
+      - risk_score    — 0–100 preliminary score (cross-list breadth × 25, capped)
+      - sanctioned    — bool
     """
     imo = re.sub(r"\D", "", imo)
     vessel = db.get_vessel(imo)
     sanctions_hits = db.search_sanctions_by_imo(imo)
 
-    # Basic risk indicators we can score from available data (Session 1)
-    risk_factors: list[str] = []
-    if sanctions_hits:
-        lists = {h["list_name"] for h in sanctions_hits}
-        risk_factors.append(f"Listed on: {', '.join(sorted(lists))}")
+    for hit in sanctions_hits:
+        _annotate_hit(hit, "imo")
 
-    risk_score = min(len(sanctions_hits) * 25, 100)  # crude initial score
+    # Collect all unique source-list display labels across every hit and
+    # count total individual membership rows (cross-list breadth signal).
+    all_tags: list[str] = []
+    total_memberships = 0
+    for h in sanctions_hits:
+        for tag in (h.get("source_tags") or []):
+            if tag not in all_tags:
+                all_tags.append(tag)
+        total_memberships += len(h.get("memberships") or [])
+
+    risk_factors: list[str] = []
+    if all_tags:
+        risk_factors.append(f"Listed on: {', '.join(sorted(all_tags))}")
+
+    # Risk score: 25 points per distinct membership row, capped at 100.
+    # A vessel on OFAC + EU + UN SC scores 75; adding a fourth list maxes it.
+    risk_score = min(total_memberships * 25, 100)
 
     return {
-        "imo_number":    imo,
-        "vessel":        vessel,
-        "sanctions_hits": sanctions_hits,
-        "risk_factors":  risk_factors,
-        "risk_score":    risk_score,
-        "sanctioned":    len(sanctions_hits) > 0,
+        "imo_number":        imo,
+        "vessel":            vessel,
+        "sanctions_hits":    sanctions_hits,
+        "source_tags":       all_tags,
+        "total_memberships": total_memberships,
+        "risk_factors":      risk_factors,
+        "risk_score":        risk_score,
+        "sanctioned":        len(sanctions_hits) > 0,
     }

@@ -107,21 +107,29 @@ function renderScreenResult(el, result) {
     </div>`;
 
   for (const hit of result.hits) {
-    const listClass = hit.list_name === 'OFAC_SDN' ? 'list-ofac' : 'list-opensanctions';
     const aliases = Array.isArray(hit.aliases) && hit.aliases.length
       ? `<div class="hit-meta">AKA: ${hit.aliases.slice(0, 5).map(escHtml).join(' · ')}</div>`
       : '';
-    const imoStr = hit.imo_number
+    const imoStr  = hit.imo_number
       ? `<span class="text-info">IMO ${hit.imo_number}</span> · ` : '';
     const mmsiStr = hit.mmsi ? `MMSI ${hit.mmsi} · ` : '';
-    const flagStr = hit.flag_state ? `Flag: ${hit.flag_state} · ` : '';
+    const flagStr = hit.flag_state ? `Flag: ${escHtml(hit.flag_state)} · ` : '';
     const typeStr = hit.vessel_type || hit.entity_type || '';
+
+    // Show how many individual list entries this canonical record has
+    const memberCount = Array.isArray(hit.memberships) ? hit.memberships.length : 0;
+    const memberNote  = memberCount > 1
+      ? `<span class="text-muted" style="font-size:.68rem;font-weight:400;">
+           (${memberCount} list entries)
+         </span>`
+      : '';
 
     html += `
       <div class="hit-card">
-        <div>
-          <span class="hit-badge ${listClass}">${escHtml(hit.list_name)}</span>
+        <div style="display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;">
+          ${sourceTagBadges(hit.source_tags)}
           <span class="hit-name">${escHtml(hit.entity_name)}</span>
+          ${memberNote}
         </div>
         <div class="hit-meta">
           ${imoStr}${mmsiStr}${flagStr}${escHtml(typeStr)}
@@ -198,15 +206,9 @@ function renderSanctionsTable(rows) {
   document.getElementById('sanctions-prev').disabled = sanctionsOffset === 0;
   document.getElementById('sanctions-next').disabled = rows.length < PAGE_SIZE;
 
-  const listBadge = name => {
-    const cls = name === 'OFAC_SDN' ? 'badge-red' : 'badge-blue';
-    const label = name === 'OFAC_SDN' ? 'OFAC' : 'OS';
-    return `<span class="badge ${cls}">${label}</span>`;
-  };
-
   tbody.innerHTML = rows.map(r => `
     <tr onclick="screenFromTable('${escAttr(r.imo_number || r.entity_name)}')" style="cursor:pointer;">
-      <td>${listBadge(r.list_name)}</td>
+      <td style="white-space:nowrap;">${sourceTagBadges(r.source_tags)}</td>
       <td class="name" title="${escAttr(r.entity_name)}">${escHtml(r.entity_name)}</td>
       <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
       <td>${r.mmsi ? escHtml(r.mmsi) : '<span class="text-muted">—</span>'}</td>
@@ -561,6 +563,68 @@ async function runNoaaIngest() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Load NOAA CSV';
+  }
+}
+
+// ── Source-tag badge helpers ───────────────────────────
+
+/**
+ * Map a source-tag display label to a CSS badge class.
+ * Labels come from normalize.py _DATASET_LABELS.
+ */
+function tagBadgeClass(tag) {
+  if (tag === 'OFAC SDN' || tag === 'OFAC CONS') return 'badge-red';
+  if (tag === 'UN SC'    || tag === 'Interpol')   return 'badge-orange';
+  if (tag.startsWith('EU') || tag.startsWith('UK')) return 'badge-blue';
+  return 'badge-muted';
+}
+
+/**
+ * Render an array of source-tag strings as HTML badge pills.
+ * Falls back to a neutral dash if the array is empty / missing.
+ */
+function sourceTagBadges(tags) {
+  if (!Array.isArray(tags) || !tags.length) {
+    return '<span class="badge badge-muted">—</span>';
+  }
+  return tags
+    .map(t => `<span class="badge ${tagBadgeClass(t)}" title="${escAttr(t)}">${escHtml(t)}</span>`)
+    .join(' ');
+}
+
+// ── Reconciliation ─────────────────────────────────────
+
+async function runReconcile() {
+  const btn      = document.getElementById('btn-reconcile');
+  const statusEl = document.getElementById('reconcile-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Running… <span class="spinner"></span>';
+  statusEl.innerHTML = '<span class="text-muted">Merging duplicate canonical records…</span>';
+
+  try {
+    const result = await apiFetch('/api/reconcile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (result.status === 'success') {
+      const t1    = result.tier1_imo_merges  || 0;
+      const t2    = result.tier2_mmsi_merges || 0;
+      const total = t1 + t2;
+      statusEl.innerHTML = total > 0
+        ? `<span class="text-success">✓ ${total} duplicate(s) merged — ` +
+          `${t1} IMO collision${t1 !== 1 ? 's' : ''} · ${t2} MMSI→IMO</span>`
+        : `<span class="text-success">✓ No duplicates found — canonical data is clean</span>`;
+      await Promise.all([loadStats(), loadSanctions()]);
+    } else {
+      statusEl.innerHTML =
+        `<span class="text-danger">✗ ${escHtml(result.error || 'Unknown error')}</span>`;
+    }
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Reconcile';
   }
 }
 

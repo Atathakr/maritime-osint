@@ -14,6 +14,8 @@ from typing import Generator
 
 import requests
 
+import normalize
+
 logger = logging.getLogger(__name__)
 
 OFAC_SDN_URL = "https://www.treasury.gov/ofac/downloads/sdn.xml"
@@ -201,10 +203,12 @@ def fetch_opensanctions_vessels() -> list[dict]:
         name = first("name") or obj.get("caption", "")
         imo_number = _clean_imo(first("imoNumber") or first("registrationNumber"))
         mmsi = _clean_mmsi(first("mmsi"))
-        flag = first("flag")
+        flag_raw = first("flag")
         vessel_type = first("type") or first("buildMaterial")
         call_sign = first("callSign")
-        programs = props.get("program", props.get("dataset", []))
+        # Full dataset list — used by normalize.parse_source_tags to build source_tags
+        datasets: list = props.get("dataset", [])
+        programs = props.get("program", datasets)
         # Name list: first is primary, rest are aliases
         all_names = props.get("name", [])
         primary = all_names[0] if all_names else name
@@ -217,14 +221,14 @@ def fetch_opensanctions_vessels() -> list[dict]:
             "imo_number":   imo_number,
             "mmsi":         mmsi,
             "vessel_type":  vessel_type,
-            "flag_state":   flag,
+            "flag_state":   flag_raw,
             "call_sign":    call_sign,
             "program":      ", ".join(programs[:5]),
             "gross_tonnage": None,
             "aliases":      aliases[:15],
             "identifiers":  {
                 "topics":   props.get("topics", []),
-                "datasets": props.get("dataset", []),
+                "datasets": datasets,          # full list, no truncation
             },
         })
 
