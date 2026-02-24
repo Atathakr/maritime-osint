@@ -2,18 +2,16 @@
 
 ## Phase 1: Foundation & Teleportation
 **Goal:** Implement the database schema and the first detection signal (speed).
+**Plans:** 3 plans
 
-- [ ] **P1-1: Database Schema**
-  - Add `spoof_events` table to `db.py`.
-  - Implement `upsert_spoof_events` and query helpers.
-- [ ] **P1-2: Teleportation Logic**
-  - Implement `find_teleport_candidates` in `db.py`.
-  - Create `spoof_detector.py` with `TELEPORT` detection logic (haversine math).
-- [ ] **P1-3: Core API Wiring**
-  - Add `POST /api/spoof/run` to `app.py`.
-  - Add `GET /api/spoof/events` to `app.py`.
-- [ ] **P1-4: Verification**
-  - Validate teleportation detection against NOAA historical data.
+- [x] phase-1-01-PLAN.md — Foundation (Schemas & DB)
+- [x] phase-1-02-PLAN.md — Teleportation Logic
+- [x] phase-1-03-PLAN.md — API & Verification
+
+- [x] **P1-1: Database Schema**
+- [x] **P1-2: Teleportation Logic**
+- [x] **P1-3: Core API Wiring**
+- [x] **P1-4: Verification**
 
 ## Phase 2: Identity & UI Integration
 **Goal:** Add identity mismatch detection and surface events in the dashboard.

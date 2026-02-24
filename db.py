@@ -2151,3 +2151,46 @@ def get_map_vessels_raw(
         c = _cursor(conn)
         c.execute(query)
         return _rows(c)
+
+
+def get_spoof_events(
+    limit: int = 200,
+    offset: int = 0,
+    mmsi: str | None = None,
+    risk_level: str | None = None,
+) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    if risk_level:
+        clauses.append(f"risk_level = {p}")
+        params.append(risk_level)
+
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, mmsi, imo_number, vessel_name, spoof_type,
+                   detected_at, lat, lon, detail, risk_level,
+                   sanctions_hit, risk_zone, indicator_code, created_at
+            FROM spoof_events
+            {where}
+            ORDER BY detected_at DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        rows = _rows(c)
+
+    for r in rows:
+        r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+        if isinstance(r.get("detail"), str):
+            try:
+                r["detail"] = json.loads(r["detail"])
+            except json.JSONDecodeError:
+                r["detail"] = {}
+    return rows

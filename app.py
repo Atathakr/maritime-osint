@@ -18,6 +18,7 @@ import sts_detection
 import reconcile
 import map_data
 import schemas
+import spoof_detector
 
 from pydantic import ValidationError
 
@@ -412,6 +413,48 @@ def api_sts_events():
         mmsi=request.args.get("mmsi") or None,
         risk_level=request.args.get("risk_level") or None,
         sanctions_only=request.args.get("sanctions_only", "").lower() in ("1", "true"),
+        limit=min(int(request.args.get("limit", 200)), 1000),
+        offset=int(request.args.get("offset", 0)),
+    )
+    return jsonify(rows)
+
+
+# ── Spoof Detection ───────────────────────────────────────────────────────
+
+@app.post("/api/spoof/run")
+@login_required
+def api_spoof_run():
+    """
+    Run spoofing detection (teleportation, etc).
+    Body: {"mmsi": "123456789", "hours_back": 48}
+    """
+    try:
+        data = schemas.SpoofDetectRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
+
+    events = spoof_detector.run_detection(
+        mmsi=data.mmsi,
+        hours_back=data.hours_back
+    )
+    return jsonify({
+        "status": "success",
+        "mmsi": data.mmsi,
+        "hours_back": data.hours_back,
+        "events_found": len(events)
+    })
+
+
+@app.get("/api/spoof/events")
+@login_required
+def api_spoof_events():
+    """
+    List detected spoofing events.
+    Query params: mmsi, risk_level, limit, offset
+    """
+    rows = db.get_spoof_events(
+        mmsi=request.args.get("mmsi") or None,
+        risk_level=request.args.get("risk_level") or None,
         limit=min(int(request.args.get("limit", 200)), 1000),
         offset=int(request.args.get("offset", 0)),
     )
