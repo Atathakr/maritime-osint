@@ -386,6 +386,30 @@ def _init_postgres(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
 
+    # ── Session 5: Spoofing events ────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS spoof_events (
+            id              SERIAL PRIMARY KEY,
+            mmsi            VARCHAR(20) NOT NULL,
+            imo_number      VARCHAR(20),
+            vessel_name     VARCHAR(255),
+            spoof_type      VARCHAR(50) NOT NULL, -- TELEPORT | OVERLAND | ID_MISMATCH
+            detected_at     TIMESTAMPTZ NOT NULL,
+            lat             DOUBLE PRECISION NOT NULL,
+            lon             DOUBLE PRECISION NOT NULL,
+            detail          JSONB DEFAULT '{}',
+            risk_level      VARCHAR(20) DEFAULT 'LOW',
+            sanctions_hit   BOOLEAN DEFAULT FALSE,
+            risk_zone       VARCHAR(100),
+            indicator_code  VARCHAR(20) DEFAULT 'IND_SPOOF',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, spoof_type, detected_at)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_mmsi ON spoof_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_ts   ON spoof_events(detected_at DESC)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -628,6 +652,30 @@ def _init_sqlite(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi2 ON sts_events(mmsi2)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
+
+    # ── Session 5: Spoofing events ────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS spoof_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi           TEXT NOT NULL,
+            imo_number     TEXT,
+            vessel_name    TEXT,
+            spoof_type     TEXT NOT NULL,
+            detected_at    TEXT NOT NULL,
+            lat            REAL NOT NULL,
+            lon            REAL NOT NULL,
+            detail         TEXT DEFAULT '{}',
+            risk_level     TEXT DEFAULT 'LOW',
+            sanctions_hit  INTEGER DEFAULT 0,
+            risk_zone      TEXT,
+            indicator_code TEXT DEFAULT 'IND_SPOOF',
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, spoof_type, detected_at)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_mmsi ON spoof_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_ts   ON spoof_events(detected_at DESC)")
 
 
 # ── Canonical vessel registry ─────────────────────────────────────────────
@@ -1292,8 +1340,10 @@ def get_stats() -> dict:
             total_dark_periods = _row(c)["n"]
             c.execute("SELECT COUNT(*) AS n FROM sts_events")
             total_sts_events = _row(c)["n"]
+            c.execute("SELECT COUNT(*) AS n FROM spoof_events")
+            total_spoof_events = _row(c)["n"]
         except Exception:
-            total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = 0
+            total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = total_spoof_events = 0
 
     return {
         "total_sanctions":     total_sanctions,
@@ -1304,6 +1354,7 @@ def get_stats() -> dict:
         "total_ais_vessels":   total_ais_vessels,
         "total_dark_periods":  total_dark_periods,
         "total_sts_events":    total_sts_events,
+        "total_spoof_events":   total_spoof_events,
     }
 
 
@@ -1844,6 +1895,99 @@ def get_sts_events(
 
     for r in rows:
         r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+    return rows
+
+
+# ── Spoofing event detection ──────────────────────────────────────────────
+
+def upsert_spoof_events(events: list[dict]) -> int:
+    """Persist detected spoofing events. Returns count inserted/updated."""
+    if not events:
+        return 0
+    inserted = 0
+    with _conn() as conn:
+        c = conn.cursor()
+        for ev in events:
+            try:
+                detail_json = json.dumps(ev.get("detail", {}))
+                if _BACKEND == "postgres":
+                    c.execute(f"""
+                        INSERT INTO spoof_events (
+                            mmsi, imo_number, vessel_name, spoof_type,
+                            detected_at, lat, lon, detail,
+                            risk_level, sanctions_hit, risk_zone, indicator_code
+                        ) VALUES ({_ph(12)})
+                        ON CONFLICT (mmsi, spoof_type, detected_at) DO UPDATE SET
+                            lat           = EXCLUDED.lat,
+                            lon           = EXCLUDED.lon,
+                            detail        = EXCLUDED.detail,
+                            risk_level    = EXCLUDED.risk_level,
+                            sanctions_hit = EXCLUDED.sanctions_hit,
+                            risk_zone     = EXCLUDED.risk_zone
+                    """, (
+                        ev.get("mmsi"), ev.get("imo_number"), ev.get("vessel_name"),
+                        ev.get("spoof_type"), ev.get("detected_at"),
+                        ev.get("lat"), ev.get("lon"), detail_json,
+                        ev.get("risk_level", "LOW"),
+                        ev.get("sanctions_hit", False),
+                        ev.get("risk_zone"),
+                        ev.get("indicator_code", "IND_SPOOF"),
+                    ))
+                else:
+                    c.execute("""
+                        INSERT OR REPLACE INTO spoof_events (
+                            mmsi, imo_number, vessel_name, spoof_type,
+                            detected_at, lat, lon, detail,
+                            risk_level, sanctions_hit, risk_zone, indicator_code
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        ev.get("mmsi"), ev.get("imo_number"), ev.get("vessel_name"),
+                        ev.get("spoof_type"), ev.get("detected_at"),
+                        ev.get("lat"), ev.get("lon"), detail_json,
+                        ev.get("risk_level", "LOW"),
+                        1 if ev.get("sanctions_hit") else 0,
+                        ev.get("risk_zone"),
+                        ev.get("indicator_code", "IND_SPOOF"),
+                    ))
+                inserted += 1
+            except Exception:
+                pass
+    return inserted
+
+
+def get_spoof_events(limit: int = 200, offset: int = 0,
+                     mmsi: str | None = None,
+                     risk_level: str | None = None) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    if risk_level:
+        clauses.append(f"risk_level = {p}")
+        params.append(risk_level)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, mmsi, imo_number, vessel_name, spoof_type,
+                   detected_at, lat, lon, detail, risk_level,
+                   sanctions_hit, risk_zone, indicator_code, created_at
+            FROM spoof_events
+            {where}
+            ORDER BY detected_at DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        rows = _rows(c)
+    for r in rows:
+        r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+        if isinstance(r.get("detail"), str):
+            try:
+                r["detail"] = json.loads(r["detail"])
+            except json.JSONDecodeError:
+                r["detail"] = {}
     return rows
 
 
