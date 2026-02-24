@@ -74,7 +74,46 @@
     </div>
   </div>
 
-  <!-- ── Live Risk Map ─────────────────────────────────── -->\n  <div class="panel" id="map-panel">\n    <div class="panel-header">\n      <span class="panel-title">Live Risk Map</span>\n      <span id="map-vessel-count" class="text-muted" style="font-size:.72rem;"></span>\n    </div>\n    <div class="panel-body" style="padding-bottom:.5rem;">\n\n      <!-- Controls bar -->\n      <div class="map-controls">\n        <div class="map-filter-group">\n          <button class="map-filter-btn active" data-filter="all"     onclick="setMapFilter(this)">All</button>\n          <button class="map-filter-btn"         data-filter="medium_plus" onclick="setMapFilter(this)">Medium+</button>\n          <button class="map-filter-btn"         data-filter="high_plus"   onclick="setMapFilter(this)">High+</button>\n          <button class="map-filter-btn"         data-filter="sanctioned"  onclick="setMapFilter(this)">Sanctioned</button>\n        </div>\n        <div style="display:flex;gap:.5rem;align-items:center;">\n          <label class="map-overlay-toggle" style="font-size:.72rem;">\n            <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">\n            OpenSeaMap\n          </label>\n          <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>\n        </div>\n        <div class="map-legend">\n          <span class="legend-dot" style="background:#e84040;"></span>Sanctioned/Critical\n          <span class="legend-dot" style="background:#f97316;"></span>High\n          <span class="legend-dot" style="background:#eab308;"></span>Medium\n          <span class="legend-dot" style="background:#475569;"></span>Clean\n        </div>\n      </div>\n\n      <!-- Map container -->\n      <div id="risk-map"></div>\n\n    </div>\n  </div>\n\n  <div class="two-col">\n\n    <!-- ── Sanctions Database ──────────────────────────── -->
+  <!-- ── Live Risk Map ─────────────────────────────────── -->
+  <div class="panel" id="map-panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Risk Map</span>
+      <span id="map-vessel-count" class="text-muted" style="font-size:.72rem;"></span>
+    </div>
+    <div class="panel-body" style="padding-bottom:.5rem;">
+
+      <!-- Controls bar -->
+      <div class="map-controls">
+        <div class="map-filter-group">
+          <button class="map-filter-btn active" data-filter="all"          onclick="setMapFilter(this)">All</button>
+          <button class="map-filter-btn"         data-filter="medium_plus"  onclick="setMapFilter(this)">Medium+</button>
+          <button class="map-filter-btn"         data-filter="high_plus"    onclick="setMapFilter(this)">High+</button>
+          <button class="map-filter-btn"         data-filter="sanctioned"   onclick="setMapFilter(this)">Sanctioned</button>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center;">
+          <label class="map-overlay-toggle" style="font-size:.72rem;">
+            <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">
+            OpenSeaMap
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>
+        </div>
+        <div class="map-legend">
+          <span class="legend-dot" style="background:#e84040;"></span>Sanctioned/Critical
+          <span class="legend-dot" style="background:#f97316;"></span>High
+          <span class="legend-dot" style="background:#eab308;"></span>Medium
+          <span class="legend-dot" style="background:#475569;"></span>Clean
+        </div>
+      </div>
+
+      <!-- Map container -->
+      <div id="risk-map"></div>
+
+    </div>
+  </div>
+
+  <div class="two-col">
+
+    <!-- ── Sanctions Database ──────────────────────────── -->
     <div class="panel" style="grid-column: 1 / -1;">
       <div class="panel-header">
         <span class="panel-title">Sanctions Database</span>
