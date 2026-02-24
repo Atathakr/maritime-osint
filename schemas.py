@@ -42,6 +42,13 @@ class AisVesselStatic(BaseModel):
     eta: str | None = None
 
 
+class OwnershipEntry(BaseModel):
+    """A single ownership / management link for a vessel."""
+    role: str           # 'owner', 'operator', 'manager', 'past_owner', etc.
+    entity_name: str
+    source: str
+
+
 class SanctionsEntry(BaseModel):
     """Normalized sanctions list entry for a vessel."""
     model_config = ConfigDict(from_attributes=True)
@@ -59,6 +66,10 @@ class SanctionsEntry(BaseModel):
     gross_tonnage: int | None = None
     aliases: list[str] = Field(default_factory=list)
     identifiers: dict = Field(default_factory=dict)
+    # Ownership opacity enrichment
+    build_year: int | None = None
+    past_flags: list[str] = Field(default_factory=list)
+    ownership_entries: list[dict] = Field(default_factory=list)
 
 
 class DarkPeriod(BaseModel):
@@ -150,6 +161,12 @@ class ScreeningHit(BaseModel):
     match_confidence: str
     memberships: list[dict] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    # Ownership opacity enrichment
+    build_year: int | None = None
+    call_sign: str | None = None
+    gross_tonnage: int | None = None
+    flag_history: list[dict] = Field(default_factory=list)
+    ownership: list[dict] = Field(default_factory=list)
 
 
 class ScreeningResult(BaseModel):

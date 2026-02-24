@@ -476,3 +476,62 @@ td.flag  { font-size: 0.75rem; }
 }
 .map-popup-risks li { color: var(--warn); }
 .map-popup-risks li::before { content: "⚑ "; }
+
+/* ── Ownership & History panel (screening hit cards) ─────────────────── */
+
+.ownership-details {
+  margin-top: .45rem;
+  border-top: 1px solid var(--border);
+  padding-top: .35rem;
+}
+.ownership-details > summary {
+  cursor: pointer;
+  font-size: .7rem;
+  color: var(--muted);
+  user-select: none;
+  list-style: none;
+}
+.ownership-details > summary::after { content: " ▸"; }
+.ownership-details[open] > summary  { color: var(--text); }
+.ownership-details[open] > summary::after { content: " ▾"; }
+.ownership-body {
+  padding: .35rem 0 .1rem;
+}
+.ownership-meta {
+  font-size: .7rem;
+  color: var(--muted);
+  margin-bottom: .3rem;
+}
+.ownership-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem;
+  margin-bottom: .2rem;
+  font-size: .7rem;
+}
+.ownership-role {
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 600;
+  min-width: 6rem;
+  flex-shrink: 0;
+}
+.ownership-name {
+  color: var(--text);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: .05rem .3rem;
+  font-size: .68rem;
+}
+.ownership-flag {
+  color: var(--muted);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: .05rem .3rem;
+  font-size: .68rem;
+  text-transform: uppercase;
+}

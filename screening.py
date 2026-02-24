@@ -119,6 +119,12 @@ def screen(query: str) -> schemas.ScreeningResult:
     sanitized_hits = []
     for hit in hits:
         _annotate_hit(hit, query_type)
+        # Attach ownership opacity data
+        canonical_id = hit.get("canonical_id")
+        imo = hit.get("imo_number")
+        if canonical_id:
+            hit["ownership"]    = db.get_vessel_ownership(canonical_id)
+            hit["flag_history"] = db.get_vessel_flag_history(imo) if imo else []
         try:
             sanitized_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:

@@ -139,6 +139,68 @@ async function runScreening() {
   }
 }
 
+const _ROLE_COLOUR = {
+  owner:         '#c0392b',
+  operator:      '#e67e22',
+  manager:       '#2980b9',
+  past_owner:    '#888',
+  past_operator: '#888',
+  past_manager:  '#888',
+};
+const _ROLE_ORDER = ['owner','operator','manager','past_owner','past_operator','past_manager'];
+
+function ownershipDetailsHtml(hit) {
+  const hasOwnership = Array.isArray(hit.ownership)    && hit.ownership.length    > 0;
+  const hasFlagHist  = Array.isArray(hit.flag_history) && hit.flag_history.length > 0;
+  const hasMeta      = hit.build_year || hit.call_sign || hit.gross_tonnage;
+  if (!hasOwnership && !hasFlagHist && !hasMeta) return '';
+
+  let body = '';
+
+  // Meta row — build year / call sign / tonnage
+  if (hasMeta) {
+    const parts = [];
+    if (hit.build_year)    parts.push(`Built: ${hit.build_year}`);
+    if (hit.call_sign)     parts.push(`Call sign: ${escHtml(hit.call_sign)}`);
+    if (hit.gross_tonnage) parts.push(`${hit.gross_tonnage.toLocaleString()} GT`);
+    body += `<div class="ownership-meta">${parts.join(' · ')}</div>`;
+  }
+
+  // Ownership rows grouped by role
+  if (hasOwnership) {
+    const grouped = {};
+    for (const e of hit.ownership) {
+      (grouped[e.role] = grouped[e.role] || []).push(e.entity_name);
+    }
+    const roles = [..._ROLE_ORDER, ...Object.keys(grouped).filter(r => !_ROLE_ORDER.includes(r))];
+    for (const role of roles) {
+      if (!grouped[role]) continue;
+      const colour = _ROLE_COLOUR[role] || '#888';
+      const label  = role.replace(/_/g, ' ');
+      body += `<div class="ownership-row">
+        <span class="ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
+      </div>`;
+    }
+  }
+
+  // Past flags row
+  if (hasFlagHist) {
+    const flags = [...new Set(hit.flag_history.map(f => f.flag_state).filter(Boolean))];
+    if (flags.length) {
+      body += `<div class="ownership-row">
+        <span class="ownership-role" style="color:#888">past flags</span>
+        ${flags.map(f => `<span class="ownership-flag">${escHtml(f)}</span>`).join('')}
+      </div>`;
+    }
+  }
+
+  return `<details class="ownership-details">
+    <summary>Ownership &amp; History</summary>
+    <div class="ownership-body">${body}</div>
+  </details>`;
+}
+
 function renderScreenResult(el, result) {
   if (result.error) {
     el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">${escHtml(result.error)}</p>`;
@@ -198,6 +260,7 @@ function renderScreenResult(el, result) {
         </div>
         ${hit.program ? `<div class="hit-meta text-accent">Program: ${escHtml(hit.program)}</div>` : ''}
         ${aliases}
+        ${ownershipDetailsHtml(hit)}
         <div class="confidence">${escHtml(hit.match_confidence || '')}</div>
       </div>`;
   }

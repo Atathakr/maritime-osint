@@ -124,6 +124,35 @@ def _jp() -> str:
 
 # ── Schema ────────────────────────────────────────────────────────────────
 
+def _migrate_vessels_canonical() -> None:
+    """
+    Add columns introduced after initial schema creation (idempotent).
+    Postgres supports ADD COLUMN IF NOT EXISTS; SQLite needs try/except per column.
+    """
+    if _BACKEND == "postgres":
+        with _conn() as conn:
+            c = conn.cursor()
+            for stmt in [
+                "ALTER TABLE vessels_canonical ADD COLUMN IF NOT EXISTS build_year    INTEGER",
+                "ALTER TABLE vessels_canonical ADD COLUMN IF NOT EXISTS call_sign     VARCHAR(50)",
+                "ALTER TABLE vessels_canonical ADD COLUMN IF NOT EXISTS gross_tonnage INTEGER",
+            ]:
+                c.execute(stmt)
+    else:
+        for col, col_type in [
+            ("build_year",    "INTEGER"),
+            ("call_sign",     "TEXT"),
+            ("gross_tonnage", "INTEGER"),
+        ]:
+            try:
+                with _conn() as conn:
+                    conn.cursor().execute(
+                        f"ALTER TABLE vessels_canonical ADD COLUMN {col} {col_type}"
+                    )
+            except Exception:
+                pass  # Column already exists — safe to ignore
+
+
 def init_db() -> None:
     """Create all tables and indexes (idempotent)."""
     with _conn() as conn:
@@ -133,6 +162,8 @@ def init_db() -> None:
             _init_postgres(c)
         else:
             _init_sqlite(c)
+
+    _migrate_vessels_canonical()
 
 
 def _init_postgres(c) -> None:
@@ -273,6 +304,20 @@ def _init_postgres(c) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sm_list      ON sanctions_memberships(list_name)",
     ]:
         c.execute(idx)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS vessel_ownership (
+            id           SERIAL PRIMARY KEY,
+            canonical_id VARCHAR(50) NOT NULL
+                         REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
+            role         VARCHAR(50)  NOT NULL,
+            entity_name  VARCHAR(500) NOT NULL,
+            source       VARCHAR(100) NOT NULL,
+            created_at   TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(canonical_id, role, entity_name, source)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_vo_canonical ON vessel_ownership(canonical_id)")
 
     # ── Session 2: AIS tables ──────────────────────────────────────────────
 
@@ -521,6 +566,20 @@ def _init_sqlite(c) -> None:
     ]:
         c.execute(idx)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS vessel_ownership (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_id TEXT NOT NULL
+                         REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
+            role         TEXT NOT NULL,
+            entity_name  TEXT NOT NULL,
+            source       TEXT NOT NULL,
+            created_at   TEXT DEFAULT (datetime('now')),
+            UNIQUE(canonical_id, role, entity_name, source)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_vo_canonical ON vessel_ownership(canonical_id)")
+
     # ── Session 2: AIS tables ──────────────────────────────────────────────
 
     c.execute("""
@@ -737,6 +796,64 @@ def upsert_sanctions_entries(entries: list[dict], list_name: str) -> tuple[int, 
                       ent.get("program"), flag_raw, ent.get("call_sign"),
                       ent.get("gross_tonnage"), identifiers_json))
 
+            # ── Promote build_year / call_sign / gross_tonnage to canonical ──
+            for col, val in [
+                ("build_year",    ent.get("build_year")),
+                ("call_sign",     ent.get("call_sign")),
+                ("gross_tonnage", ent.get("gross_tonnage")),
+            ]:
+                if val is not None:
+                    c.execute(
+                        f"UPDATE vessels_canonical SET {col} = {p} "
+                        f"WHERE canonical_id = {p} AND {col} IS NULL",
+                        (val, canonical_id),
+                    )
+
+            # ── Populate vessel_flag_history from past_flags ──────────────
+            past_flags = ent.get("past_flags") or []
+            if imo and past_flags:
+                for flag_code in past_flags:
+                    if not flag_code:
+                        continue
+                    if _BACKEND == "postgres":
+                        c.execute("""
+                            INSERT INTO vessel_flag_history (imo_number, flag_state, source)
+                            SELECT %s, %s, %s
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM vessel_flag_history
+                                WHERE imo_number = %s AND flag_state = %s AND source = %s
+                            )
+                        """, (imo, flag_code, list_name, imo, flag_code, list_name))
+                    else:
+                        c.execute("""
+                            INSERT INTO vessel_flag_history (imo_number, flag_state, source)
+                            SELECT ?, ?, ?
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM vessel_flag_history
+                                WHERE imo_number = ? AND flag_state = ? AND source = ?
+                            )
+                        """, (imo, flag_code, list_name, imo, flag_code, list_name))
+
+            # ── Populate vessel_ownership ─────────────────────────────────
+            for own in (ent.get("ownership_entries") or []):
+                role_val    = own.get("role", "owner")
+                entity_name = (own.get("entity_name") or "").strip()
+                source_val  = own.get("source", list_name)
+                if not entity_name:
+                    continue
+                if _BACKEND == "postgres":
+                    c.execute("""
+                        INSERT INTO vessel_ownership (canonical_id, role, entity_name, source)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (canonical_id, role, entity_name, source) DO NOTHING
+                    """, (canonical_id, role_val, entity_name, source_val))
+                else:
+                    c.execute("""
+                        INSERT OR IGNORE INTO vessel_ownership
+                            (canonical_id, role, entity_name, source)
+                        VALUES (?, ?, ?, ?)
+                    """, (canonical_id, role_val, entity_name, source_val))
+
     return c_inserted, c_updated
 
 
@@ -864,7 +981,8 @@ def _screen_canonical(where_clause: str, params: list) -> list[dict]:
         c = _cursor(conn)
         c.execute(f"""
             SELECT canonical_id, entity_name, imo_number, mmsi, vessel_type,
-                   flag_normalized, aliases, source_tags, match_method, created_at
+                   flag_normalized, aliases, source_tags, match_method, created_at,
+                   build_year, call_sign, gross_tonnage
             FROM vessels_canonical
             WHERE {where_clause}
         """, params)
@@ -1017,6 +1135,34 @@ def get_vessel_memberships(canonical_id: str) -> list[dict]:
             except json.JSONDecodeError:
                 r["identifiers"] = {}
     return rows
+
+
+def get_vessel_ownership(canonical_id: str) -> list[dict]:
+    """Return all ownership / management entries for one canonical vessel."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT role, entity_name, source
+            FROM vessel_ownership
+            WHERE canonical_id = {p}
+            ORDER BY role, entity_name
+        """, (canonical_id,))
+        return _rows(c)
+
+
+def get_vessel_flag_history(imo_number: str) -> list[dict]:
+    """Return historical flag states for a vessel, newest first."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT flag_state, effective_date, source
+            FROM vessel_flag_history
+            WHERE imo_number = {p}
+            ORDER BY created_at DESC
+        """, (imo_number,))
+        return _rows(c)
 
 
 # ── Reconciliation helpers ────────────────────────────────────────────────

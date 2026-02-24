@@ -137,8 +137,15 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
                 except ValueError:
                     pass
 
+        # Structured ownership entry — also keep in identifiers for backward compat
+        ofac_ownership: list[dict] = []
         if owner_operator:
             identifiers["owner_operator"] = owner_operator
+            ofac_ownership.append({
+                "role": "owner",
+                "entity_name": owner_operator,
+                "source": "OFAC_SDN",
+            })
 
         try:
             entry = schemas.SanctionsEntry(
@@ -155,6 +162,7 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
                 gross_tonnage=gross_tonnage,
                 aliases=aliases,
                 identifiers=identifiers,
+                ownership_entries=ofac_ownership,
             )
             entries.append(entry.model_dump())
         except Exception as e:
@@ -219,6 +227,37 @@ def fetch_opensanctions_vessels() -> list[dict]:
         primary = all_names[0] if all_names else name
         aliases = list({n for n in all_names[1:] + props.get("alias", []) if n != primary})
 
+        # ── Ownership opacity fields ──────────────────────────────────────
+        build_year_raw = first("buildDate")   # e.g. "1998" or "1998-01-01"
+        build_year: int | None = None
+        if build_year_raw and build_year_raw[:4].isdigit():
+            build_year = int(build_year_raw[:4])
+
+        gross_tonnage_raw = first("grossTonnage")
+        gross_tonnage: int | None = None
+        if gross_tonnage_raw:
+            digits = re.sub(r"\D", "", gross_tonnage_raw)
+            gross_tonnage = int(digits) if digits else None
+
+        past_flags: list[str] = props.get("pastFlags", [])
+
+        ownership_entries: list[dict] = []
+        for role, prop_key in [
+            ("owner",         "owner"),
+            ("operator",      "operator"),
+            ("manager",       "manager"),
+            ("past_owner",    "pastOwner"),
+            ("past_operator", "pastOperator"),
+            ("past_manager",  "pastManager"),
+        ]:
+            for name_val in props.get(prop_key, []):
+                if name_val:
+                    ownership_entries.append({
+                        "role": role,
+                        "entity_name": name_val,
+                        "source": "OpenSanctions",
+                    })
+
         try:
             entry = schemas.SanctionsEntry(
                 list_name="OpenSanctions",
@@ -231,11 +270,15 @@ def fetch_opensanctions_vessels() -> list[dict]:
                 flag_state=flag_raw,
                 call_sign=call_sign,
                 program=", ".join(programs[:5]),
+                gross_tonnage=gross_tonnage,
                 aliases=aliases[:15],
                 identifiers={
                     "topics":   props.get("topics", []),
                     "datasets": datasets,
                 },
+                build_year=build_year,
+                past_flags=past_flags,
+                ownership_entries=ownership_entries,
             )
             entries.append(entry.model_dump())
         except Exception as e:
