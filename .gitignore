@@ -11,3 +11,8 @@ dist/
 build/
 .pytest_cache/
 *.log
+
+# Local SQLite database (production uses PostgreSQL on Railway)
+*.db
+*.db-wal
+*.db-shm
