@@ -15,6 +15,7 @@
   let _map          = null;
   let _markers      = null;   // L.LayerGroup for vessel markers
   let _trackLayer   = null;   // L.Polyline for active vessel track
+  let _trackMmsi    = null;   // MMSI of the currently loaded track
   let _openSeaLayer = null;
   let _currentFilter = "medium_plus";
   let _refreshTimer  = null;
@@ -111,8 +112,8 @@
     
     const trackBtn = v.mmsi 
       ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
-           onclick="showVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
-           Show 72h Track
+           onclick="toggleVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
+           ${v.mmsi === _trackMmsi ? "Hide Track" : "Show 72h Track"}
          </button>`
       : "";
 
@@ -182,11 +183,15 @@
   }
 
   // ── Track Visualization ──────────────────────────────────────────────────
-  async function showVesselTrack(mmsi, name) {
-    if (_trackLayer) {
-      _map.removeLayer(_trackLayer);
-      _trackLayer = null;
+  async function toggleVesselTrack(mmsi, name) {
+    // If clicking the same vessel that's already showing, just clear it (toggle off)
+    if (_trackMmsi === mmsi) {
+      clearTrack();
+      return;
     }
+
+    // Otherwise, clear any existing track and load the new one
+    clearTrack();
 
     try {
       const resp = await fetch(`/api/ais/vessels/${mmsi}/track?hours=72`);
@@ -207,14 +212,38 @@
         lineJoin:    "round"
       }).addTo(_map);
 
+      _trackMmsi = mmsi;
+      updateTrackButton(true);
+
       _map.fitBounds(_trackLayer.getBounds(), { padding: [50, 50] });
-      
-      // Close existing popups to show the track clearly
       _map.closePopup();
 
     } catch (err) {
       console.warn("map: track fetch error", err);
       alert("Failed to load vessel track.");
+    }
+  }
+
+  function clearTrack() {
+    if (_trackLayer) {
+      _map.removeLayer(_trackLayer);
+      _trackLayer = null;
+    }
+    _trackMmsi = null;
+    updateTrackButton(false);
+  }
+
+  function updateTrackButton(active) {
+    const btn = document.getElementById("btn-clear-track");
+    if (!btn) return;
+    if (active) {
+      btn.textContent = "Hide Track";
+      btn.classList.add("active");
+      btn.disabled = false;
+    } else {
+      btn.textContent = "No Active Track";
+      btn.classList.remove("active");
+      btn.disabled = true;
     }
   }
 
@@ -246,15 +275,12 @@
     fetchVessels();
   };
 
-  window.showVesselTrack = function (mmsi, name) {
-    showVesselTrack(mmsi, name);
+  window.toggleVesselTrack = function (mmsi, name) {
+    toggleVesselTrack(mmsi, name);
   };
 
   window.clearTrack = function () {
-    if (_trackLayer) {
-      _map.removeLayer(_trackLayer);
-      _trackLayer = null;
-    }
+    clearTrack();
   };
 
   window.setMapFilter = function (btn) {

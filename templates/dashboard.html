@@ -95,7 +95,7 @@
             <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">
             OpenSeaMap
           </label>
-          <button class="btn btn-secondary btn-sm" onclick="clearTrack()">Clear Track</button>
+          <button id="btn-clear-track" class="btn btn-secondary btn-sm" onclick="clearTrack()" disabled>No Active Track</button>
           <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>
         </div>
         <div class="map-legend">
