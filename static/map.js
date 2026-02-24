@@ -14,6 +14,7 @@
   // ── State ────────────────────────────────────────────────────────────────
   let _map          = null;
   let _markers      = null;   // L.LayerGroup for vessel markers
+  let _trackLayer   = null;   // L.Polyline for active vessel track
   let _openSeaLayer = null;
   let _currentFilter = "medium_plus";
   let _refreshTimer  = null;
@@ -107,12 +108,20 @@
     const tags = (v.source_tags || [])
       .map(t => `<span class="badge badge-${tagBadgeClass(t)}" style="font-size:.65rem;">${escHtml(t)}</span>`)
       .join(" ") || "";
+    
+    const trackBtn = v.mmsi 
+      ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
+           onclick="showVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
+           Show 72h Track
+         </button>`
+      : "";
+
     const screenBtn = v.imo_number
-      ? `<button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%;"
+      ? `<button class="btn btn-primary btn-sm" style="margin-top:.25rem;width:100%;"
            onclick="document.getElementById('screen-query').value='${escAttr(v.imo_number)}';runScreening();">
            Screen this vessel
          </button>`
-      : `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
+      : `<button class="btn btn-secondary btn-sm" style="margin-top:.25rem;width:100%;"
            onclick="document.getElementById('screen-query').value='${escAttr(v.mmsi||"")}';runScreening();">
            Screen this vessel (MMSI)
          </button>`;
@@ -131,6 +140,7 @@
       <div style="margin:.4rem 0 .2rem;font-size:.72rem;color:var(--muted);">Risk factors</div>
       <ul class="map-popup-risks">${reasons}</ul>
       ${tags ? `<div style="margin-top:.35rem;">${tags}</div>` : ""}
+      ${trackBtn}
       ${screenBtn}
     </div>`;
   }
@@ -171,6 +181,43 @@
     });
   }
 
+  // ── Track Visualization ──────────────────────────────────────────────────
+  async function showVesselTrack(mmsi, name) {
+    if (_trackLayer) {
+      _map.removeLayer(_trackLayer);
+      _trackLayer = null;
+    }
+
+    try {
+      const resp = await fetch(`/api/ais/vessels/${mmsi}/track?hours=72`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      
+      if (!data.track || data.track.length < 2) {
+        alert(`No track data found for ${name} in the last 72 hours.`);
+        return;
+      }
+
+      const latlngs = data.track.map(p => [p.lat, p.lon]);
+      _trackLayer = L.polyline(latlngs, {
+        color:       "#3b82f6", // Blue-500
+        weight:      3,
+        opacity:     0.8,
+        dashArray:   "5, 10",
+        lineJoin:    "round"
+      }).addTo(_map);
+
+      _map.fitBounds(_trackLayer.getBounds(), { padding: [50, 50] });
+      
+      // Close existing popups to show the track clearly
+      _map.closePopup();
+
+    } catch (err) {
+      console.warn("map: track fetch error", err);
+      alert("Failed to load vessel track.");
+    }
+  }
+
   // ── Public API ───────────────────────────────────────────────────────────
   window.initMap = function () {
     if (_map) return;   // already initialised
@@ -197,6 +244,17 @@
 
   window.refreshMap = function () {
     fetchVessels();
+  };
+
+  window.showVesselTrack = function (mmsi, name) {
+    showVesselTrack(mmsi, name);
+  };
+
+  window.clearTrack = function () {
+    if (_trackLayer) {
+      _map.removeLayer(_trackLayer);
+      _trackLayer = null;
+    }
   };
 
   window.setMapFilter = function (btn) {

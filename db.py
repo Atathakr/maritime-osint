@@ -1170,6 +1170,29 @@ def rebuild_all_source_tags() -> None:
             """, (json.dumps(tags), cid))
 
 
+def get_vessel_track(mmsi: str, hours: int = 72) -> list[dict]:
+    """
+    Return historical positions for a specific vessel, ordered chronologically.
+    Used for drawing breadcrumb tracks on the map.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    cutoff_expr = (
+        f"datetime('now', '-{hours} hours')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{hours} hours'"
+    )
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT lat, lon, position_ts, sog, cog
+            FROM ais_positions
+            WHERE mmsi = {p}
+              AND position_ts >= {cutoff_expr}
+            ORDER BY position_ts ASC
+        """, (mmsi,))
+        return _rows(c)
+
+
 # ── Ingest log ────────────────────────────────────────────────────────────
 
 def log_ingest_start(source_name: str) -> int:

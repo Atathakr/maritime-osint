@@ -284,6 +284,15 @@ def api_ais_vessels():
     return jsonify(rows)
 
 
+@app.get("/api/ais/vessels/<mmsi>/track")
+@login_required
+def api_vessel_track(mmsi):
+    """Historical track for a specific vessel (default 72h)."""
+    hours = min(int(request.args.get("hours", 72)), 168)  # Cap at 1 week
+    track = db.get_vessel_track(mmsi, hours=hours)
+    return jsonify({"mmsi": mmsi, "count": len(track), "track": track})
+
+
 # ── Dark Periods ───────────────────────────────────────────────────────────
 
 @app.post("/api/dark-periods/detect")
