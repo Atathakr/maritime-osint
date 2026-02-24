@@ -46,9 +46,69 @@ async function loadStats() {
 
     setText('hdr-total',
       `${fmt(data.total_sanctions)} sanctions · ${fmt(data.total_ais_vessels || 0)} AIS vessels`);
+
+    // Auto-boot: silently populate empty data sources on first load
+    autoBootSequence(by['OFAC_SDN'] || 0, by['OpenSanctions'] || 0);
   } catch (e) {
     console.error('Stats load failed', e);
   }
+}
+
+// Run once on page load — silently ingests empty sources and tries AIS connect
+let _bootDone = false;
+async function autoBootSequence(ofacCount, osCount) {
+  if (_bootDone) return;
+  _bootDone = true;
+
+  const statusEl = document.getElementById('ingest-status');
+  let ranIngest = false;
+
+  // ── Sanctions ingests (only if empty) ──────────────────────────────────
+  if (ofacCount === 0) {
+    statusEl.innerHTML = '<span class="text-muted">⟳ Auto-fetching OFAC SDN (first load)…</span>';
+    try {
+      const r = await apiFetch('/api/ingest/ofac', { method: 'POST' });
+      if (r.status === 'success') {
+        statusEl.innerHTML =
+          `<span class="text-success">✓ OFAC SDN: ${fmt(r.inserted)} records loaded</span>`;
+        ranIngest = true;
+      }
+    } catch (e) { console.warn('Auto OFAC ingest failed', e); }
+  }
+
+  if (osCount === 0) {
+    statusEl.innerHTML =
+      '<span class="text-muted">⟳ Auto-fetching OpenSanctions (~30–90 s)…</span>';
+    try {
+      const r = await apiFetch('/api/ingest/opensanctions', { method: 'POST' });
+      if (r.status === 'success') {
+        statusEl.innerHTML =
+          `<span class="text-success">✓ OpenSanctions: ${fmt(r.inserted)} records loaded</span>`;
+        ranIngest = true;
+      }
+    } catch (e) { console.warn('Auto OpenSanctions ingest failed', e); }
+  }
+
+  if (ranIngest) {
+    // Reconcile after fresh ingest, then refresh all panels
+    try { await apiFetch('/api/reconcile', { method: 'POST' }); } catch (_) {}
+    await Promise.all([loadStats(), loadSanctions(), loadIngestLog()]);
+    statusEl.innerHTML = '<span class="text-success">✓ Data loaded and reconciled.</span>';
+  }
+
+  // ── AIS auto-connect (backend uses AISSTREAM_API_KEY env var if no key sent) ─
+  try {
+    const aisStatus = await apiFetch('/api/ais/status');
+    if (!aisStatus.running) {
+      // Send empty key — app.py falls back to AISSTREAM_API_KEY env var
+      const r = await apiFetch('/api/ais/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: '' }),
+      });
+      if (r.status === 'started') loadAisStatus();
+    }
+  } catch (_) { /* No key configured — silently skip */ }
 }
 
 // ── Screening ─────────────────────────────────────────

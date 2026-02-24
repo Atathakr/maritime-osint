@@ -54,8 +54,10 @@
   function markerOptions(vessel) {
     const col = riskColour(vessel);
     const r   = riskRadius(vessel);
+    // No per-marker renderer — share the map's single canvas (preferCanvas: true).
+    // Creating L.canvas() per-marker generates independent canvas elements and
+    // breaks Leaflet's hit-detection, causing tooltips/popups to fail randomly.
     return {
-      renderer:    L.canvas(),
       radius:      r,
       color:       col,
       fillColor:   col,
