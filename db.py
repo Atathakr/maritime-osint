@@ -25,10 +25,7 @@ _POOL = None                # ThreadedConnectionPool (postgres only)
 def _init_backend() -> None:
     global _DB_URL, _BACKEND
     _DB_URL = os.getenv("DATABASE_URL", "")
-    if _DB_URL.startswith(("postgresql://", "postgres://")):
-        _BACKEND = "postgres"
-    else:
-        _BACKEND = "sqlite"
+    _BACKEND = "postgres" if _DB_URL.startswith(("postgresql://", "postgres://")) else "sqlite"
 
 
 _init_backend()
@@ -189,8 +186,10 @@ def _init_postgres(c) -> None:
         )
     """)
     for idx in [
-        "CREATE INDEX IF NOT EXISTS idx_san_imo  ON sanctions_entries(imo_number) WHERE imo_number IS NOT NULL",
-        "CREATE INDEX IF NOT EXISTS idx_san_mmsi ON sanctions_entries(mmsi)       WHERE mmsi IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_san_imo  ON sanctions_entries(imo_number) "
+        "WHERE imo_number IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_san_mmsi ON sanctions_entries(mmsi) "
+        "WHERE mmsi IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_san_name ON sanctions_entries(entity_name)",
         "CREATE INDEX IF NOT EXISTS idx_san_list ON sanctions_entries(list_name)",
         "CREATE INDEX IF NOT EXISTS idx_san_prog ON sanctions_entries(program)",
@@ -242,8 +241,10 @@ def _init_postgres(c) -> None:
         )
     """)
     for idx in [
-        "CREATE INDEX IF NOT EXISTS idx_vc_imo    ON vessels_canonical(imo_number) WHERE imo_number IS NOT NULL",
-        "CREATE INDEX IF NOT EXISTS idx_vc_mmsi   ON vessels_canonical(mmsi)       WHERE mmsi IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_vc_imo    ON vessels_canonical(imo_number) "
+        "WHERE imo_number IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_vc_mmsi   ON vessels_canonical(mmsi)       "
+        "WHERE mmsi IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_vc_name   ON vessels_canonical(entity_name)",
         "CREATE INDEX IF NOT EXISTS idx_vc_method ON vessels_canonical(match_method)",
     ]:
@@ -297,7 +298,8 @@ def _init_postgres(c) -> None:
     for idx in [
         "CREATE INDEX IF NOT EXISTS idx_aispos_mmsi   ON ais_positions(mmsi)",
         "CREATE INDEX IF NOT EXISTS idx_aispos_ts     ON ais_positions(position_ts DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_aispos_imo    ON ais_positions(imo_number) WHERE imo_number IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_aispos_imo    ON ais_positions(imo_number) "
+        "WHERE imo_number IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_aispos_box    ON ais_positions(lat, lon)",
     ]:
         c.execute(idx)
@@ -326,7 +328,10 @@ def _init_postgres(c) -> None:
             updated_at      TIMESTAMPTZ DEFAULT NOW()
         )
     """)
-    c.execute("CREATE INDEX IF NOT EXISTS idx_aisvsl_imo ON ais_vessels(imo_number) WHERE imo_number IS NOT NULL")
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS idx_aisvsl_imo ON ais_vessels(imo_number) "
+        "WHERE imo_number IS NOT NULL"
+    )
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS dark_periods (
@@ -495,7 +500,8 @@ def _init_sqlite(c) -> None:
     c.execute("""
         CREATE TABLE IF NOT EXISTS sanctions_memberships (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            canonical_id  TEXT NOT NULL REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
+            canonical_id  TEXT NOT NULL
+                          REFERENCES vessels_canonical(canonical_id) ON DELETE CASCADE,
             list_name     TEXT NOT NULL,
             source_id     TEXT NOT NULL,
             entity_type   TEXT,
@@ -818,7 +824,7 @@ def get_sanctions_entries(
             if isinstance(r.get(field), str):
                 try:
                     r[field] = json.loads(r[field])
-                except Exception:
+                except json.JSONDecodeError:
                     r[field] = []
         # Backward-compat: expose first tag as list_name
         tags = r.get("source_tags") or []
@@ -870,7 +876,7 @@ def _screen_canonical(where_clause: str, params: list) -> list[dict]:
             if isinstance(can.get(field), str):
                 try:
                     can[field] = json.loads(can[field])
-                except Exception:
+                except json.JSONDecodeError:
                     can[field] = []
         memberships = get_vessel_memberships(can["canonical_id"])
         can["memberships"] = memberships
@@ -955,7 +961,7 @@ def get_vessels(q: str | None = None, limit: int = 100, offset: int = 0) -> list
         if isinstance(r.get("source_tags"), str):
             try:
                 r["source_tags"] = json.loads(r["source_tags"])
-            except Exception:
+            except json.JSONDecodeError:
                 r["source_tags"] = []
     return rows
 
@@ -973,7 +979,7 @@ def get_vessel(imo: str) -> dict | None:
             if isinstance(r.get(field), str):
                 try:
                     r[field] = json.loads(r[field])
-                except Exception:
+                except json.JSONDecodeError:
                     r[field] = []
     return r
 
@@ -1008,7 +1014,7 @@ def get_vessel_memberships(canonical_id: str) -> list[dict]:
         if isinstance(r.get("identifiers"), str):
             try:
                 r["identifiers"] = json.loads(r["identifiers"])
-            except Exception:
+            except json.JSONDecodeError:
                 r["identifiers"] = {}
     return rows
 
@@ -1101,7 +1107,7 @@ def merge_canonical(source_id: str, target_id: str) -> None:
             if isinstance(val, str):
                 try:
                     return json.loads(val)
-                except Exception:
+                except json.JSONDecodeError:
                     return []
             return val or []
 
@@ -1547,7 +1553,7 @@ def find_ais_gaps(mmsi: str | None = None, min_hours: float = 2.0,
         ORDER BY gap_start DESC
         LIMIT {p}
     """
-    params = mmsi_params + [min_hours, limit]
+    params = [*mmsi_params, min_hours, limit]
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(query, params)

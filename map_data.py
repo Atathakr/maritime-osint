@@ -14,8 +14,8 @@ direct consumption by the Leaflet front-end.
 from __future__ import annotations
 
 import json
-import db
 
+import db
 
 # ── Risk tables ────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ def get_map_vessels(
         if isinstance(raw_tags, str):
             try:
                 source_tags = json.loads(raw_tags)
-            except Exception:
+            except json.JSONDecodeError:
                 source_tags = []
         elif isinstance(raw_tags, list):
             source_tags = raw_tags
