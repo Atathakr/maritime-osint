@@ -1,4 +1,4 @@
-"""Flask application — Maritime OSINT Platform (Sessions 1–4: Sanctions + AIS + Reconciliation)."""
+"""Flask application - Maritime OSINT Platform (Sessions 1-4: Sanctions + AIS + Reconciliation)."""
 
 import os
 import secrets
@@ -199,7 +199,7 @@ def _run_ingest(source: str, fetch_fn, list_name: str) -> dict:
 @app.post("/api/ingest/ofac")
 @login_required
 def api_ingest_ofac():
-    """Download and ingest the OFAC SDN vessel list (synchronous, ~5–15 s)."""
+    """Download and ingest the OFAC SDN vessel list (synchronous, ~5-15 s)."""
     result = _run_ingest("OFAC_SDN", ingest.fetch_ofac_sdn, "OFAC_SDN")
     code = 200 if result["status"] == "success" else 502
     return jsonify(result), code
@@ -209,7 +209,7 @@ def api_ingest_ofac():
 @login_required
 def api_ingest_opensanctions():
     """
-    Stream and ingest OpenSanctions consolidated vessel data (sync, 30–90 s).
+    Stream and ingest OpenSanctions consolidated vessel data (sync, 30-90 s).
     The gunicorn timeout is set to 120 s which is sufficient.
     """
     result = _run_ingest(

@@ -145,9 +145,9 @@ def screen_vessel_detail(imo: str) -> dict:
       - sanctions_hits — list of canonical hit dicts (typically one for IMO lookup),
                          each with attached memberships for data lineage
       - source_tags   — merged, de-duplicated list of all sanctioning bodies
-      - total_memberships — total count of individual list entries across all hits
-      - risk_factors  — human-readable risk indicator strings
-      - risk_score    — 0–100 preliminary score (cross-list breadth × 25, capped)
+      - total_memberships - total count of individual list entries across all hits
+      - risk_factors - human-readable risk indicator strings
+      - risk_score - 0-100 preliminary score (cross-list breadth x 25, capped)
       - sanctioned    — bool
     """
     imo = re.sub(r"\D", "", imo)

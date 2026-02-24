@@ -4,7 +4,7 @@ AIS live position listener — aisstream.io WebSocket client.
 Runs as a daemon thread started automatically by app.py when
 AISSTREAM_API_KEY is set in the environment.
 
-Filter: tanker vessel types (AIS codes 80–89) globally.
+Filter: tanker vessel types (AIS codes 80-89) globally.
 Buffer: positions are batched (BUFFER_SIZE) before DB insert to
         reduce write pressure on the SQLite/PostgreSQL backend.
 

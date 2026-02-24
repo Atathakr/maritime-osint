@@ -6,6 +6,7 @@ Session 1 sources:
   - OpenSanctions  (CC BY-SA 4.0, free bulk download)
 """
 
+import contextlib
 import json
 import logging
 import re
@@ -132,10 +133,8 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
                 or _txt(vessel_info_el, "tonnage")
             )
             if gt_raw:
-                try:
+                with contextlib.suppress(ValueError):
                     gross_tonnage = int(re.sub(r"\D", "", gt_raw))
-                except ValueError:
-                    pass
 
         if owner_operator:
             identifiers["owner_operator"] = owner_operator

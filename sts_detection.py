@@ -4,7 +4,7 @@ Session 3: Ship-to-Ship (STS) proximity detection — Indicator 7.
 Algorithm
 ─────────
 1. Pull candidate position pairs from ais_positions via a bounding-box
-   SQL self-join (pre-filter to ≤ 0.05° × 0.05° and ≤ 30-min window).
+   SQL self-join (pre-filter to <= 0.05° x 0.05° and <= 30-min window).
 2. Apply exact Haversine filter in Python (≤ STS_DISTANCE_KM).
 3. Require at least ONE vessel to be near-stationary (SOG ≤ MAX_SOG).
 4. Deduplicate: same pair within DEDUP_HOURS is one event.
@@ -63,7 +63,7 @@ def _classify_zone(lat: float, lon: float) -> str | None:
 
 
 def _risk_level(
-    distance_km: float,
+    _distance_km: float,
     sanctions_hit: bool,
     risk_zone: str | None,
     sog1: float | None,

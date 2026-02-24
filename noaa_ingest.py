@@ -8,11 +8,11 @@ and batch-inserts into ais_positions.
 Data URL pattern:
   https://coast.noaa.gov/htdata/CMSP/AISDataHandler/{year}/AIS_{year}_{month:02d}_Zone{zone:02d}.zip
 
-Zones: 01–17 cover US coastal waters.
-Recommended starting zone: Zone 10 (Gulf of Mexico) — rich tanker traffic
+Zones: 01-17 cover US coastal waters.
+Recommended starting zone: Zone 10 (Gulf of Mexico) - rich tanker traffic
   and a known transit corridor for shadow fleet movements.
 
-File sizes: 200 MB – 1 GB zipped; expect 5–15 min download on a typical link.
+File sizes: 200 MB - 1 GB zipped; expect 5-15 min download on a typical link.
 This ingest runs synchronously inside a Flask request — the gunicorn timeout
 is 120 s which is sufficient for a single zone file over a fast connection.
 For large files, call from a background thread or increase the timeout.
