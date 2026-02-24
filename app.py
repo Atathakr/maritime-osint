@@ -2,8 +2,6 @@
 
 import os
 import secrets
-import threading
-from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -19,6 +17,9 @@ import noaa_ingest
 import sts_detection
 import reconcile
 import map_data
+import schemas
+
+from pydantic import ValidationError
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
@@ -104,12 +105,13 @@ def api_stats():
 @login_required
 def api_screen():
     """Screen a vessel by IMO, MMSI, or name against all sanctions lists."""
-    data = request.get_json(silent=True) or {}
-    query = data.get("query", "").strip()
-    if not query:
-        return jsonify({"error": "query is required"}), 400
-    result = screening.screen(query)
-    return jsonify(result)
+    try:
+        data = schemas.ScreeningRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
+
+    result = screening.screen(data.query)
+    return jsonify(result.model_dump())
 
 
 @app.get("/api/screen/<path:imo>")
@@ -117,7 +119,7 @@ def api_screen():
 def api_screen_imo(imo):
     """Full screening report for a specific vessel by IMO number."""
     result = screening.screen_vessel_detail(imo)
-    return jsonify(result)
+    return jsonify(result.model_dump())
 
 
 # ── Sanctions browser ─────────────────────────────────────────────────────
@@ -293,20 +295,21 @@ def api_dark_periods_detect():
     Run dark-period detection for one MMSI (or all if omitted).
     Body: {"mmsi": "123456789", "min_hours": 2}
     """
-    data = request.get_json(silent=True) or {}
-    mmsi = data.get("mmsi") or None
-    min_hours = float(data.get("min_hours", 2.0))
+    try:
+        data = schemas.DarkPeriodDetectRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
 
-    if mmsi:
-        periods = dark_periods.run_detection(mmsi, min_hours)
+    if data.mmsi:
+        periods = dark_periods.run_detection(data.mmsi, data.min_hours)
         summary = dark_periods.summarise(periods)
-        return jsonify({"mmsi": mmsi, "periods_found": len(periods), "summary": summary})
+        return jsonify({"mmsi": data.mmsi, "periods_found": len(periods), "summary": summary})
 
     # Bulk: iterate all unique MMSIs seen in the last 30 days
     all_mmsis = db.get_active_mmsis(days=30)
     total = 0
     for m in all_mmsis:
-        found = dark_periods.run_detection(m, min_hours)
+        found = dark_periods.run_detection(m, data.min_hours)
         total += len(found)
     return jsonify({"mmsis_scanned": len(all_mmsis), "total_periods_found": total})
 
@@ -371,24 +374,21 @@ def api_sts_detect():
     Run STS proximity detection over recent AIS positions.
     Body (all optional): {"hours_back": 48, "max_distance_km": 0.926, "max_sog": 3.0}
     """
-    data = request.get_json(silent=True) or {}
     try:
-        hours_back      = int(data.get("hours_back", 48))
-        max_distance_km = float(data.get("max_distance_km", 0.926))
-        max_sog         = float(data.get("max_sog", 3.0))
-    except (TypeError, ValueError) as exc:
-        return jsonify({"error": f"Invalid parameters: {exc}"}), 400
+        data = schemas.StsDetectRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
 
     events = sts_detection.run_detection(
-        hours_back=hours_back,
-        max_distance_km=max_distance_km,
-        max_sog=max_sog,
+        hours_back=data.hours_back,
+        max_distance_km=data.max_distance_km,
+        max_sog=data.max_sog,
     )
     summary = sts_detection.summarise(events)
     return jsonify({
         "events_found": len(events),
         "summary":      summary,
-        "hours_back":   hours_back,
+        "hours_back":   data.hours_back,
     })
 
 

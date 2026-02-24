@@ -18,9 +18,13 @@ IND7 — Ship-to-ship transfer at sea (both vessels slow, close proximity)
 """
 
 import math
-from datetime import datetime, timezone
+import logging
+from datetime import datetime
 
 import db
+import schemas
+
+logger = logging.getLogger(__name__)
 
 # ── Detection thresholds ──────────────────────────────────────────────────
 
@@ -175,23 +179,29 @@ def run_detection(
 
         risk = _risk_level(dist_km, sanctions_hit, zone, sog1, sog2)
 
-        events.append({
-            "mmsi1":        mmsi1,
-            "mmsi2":        mmsi2,
-            "vessel_name1": c.get("vessel_name1"),
-            "vessel_name2": c.get("vessel_name2"),
-            "event_ts":     c.get("ts"),
-            "lat":          mid_lat,
-            "lon":          mid_lon,
-            "distance_m":   dist_km * 1000,
-            "distance_km":  dist_km,
-            "sog1":         sog1,
-            "sog2":         sog2,
-            "risk_zone":    zone,
-            "risk_level":   risk,
-            "sanctions_hit": sanctions_hit,
-            "indicator_code": "IND7",
-        })
+        try:
+            ev = schemas.StsEvent(
+                mmsi1=mmsi1,
+                mmsi2=mmsi2,
+                vessel_name1=c.get("vessel_name1"),
+                vessel_name2=c.get("vessel_name2"),
+                event_ts=c.get("ts"),
+                lat=mid_lat,
+                lon=mid_lon,
+                distance_m=dist_km * 1000,
+                sog1=sog1,
+                sog2=sog2,
+                risk_zone=zone,
+                risk_level=risk,
+                sanctions_hit=sanctions_hit,
+                indicator_code="IND7",
+            )
+            # We need distance_km for the deduplication step in _deduplicate
+            event_dict = ev.model_dump()
+            event_dict["distance_km"] = dist_km
+            events.append(event_dict)
+        except Exception as e:
+            logger.debug("Validation failed for STS event %s-%s: %s", mmsi1, mmsi2, e)
 
     # Step 5 — deduplicate
     events = _deduplicate(events)
