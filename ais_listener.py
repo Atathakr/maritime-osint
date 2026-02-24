@@ -157,9 +157,10 @@ def _handle_message(msg: dict) -> None:
             # Also update last-seen on ais_vessels
             import db
             db.update_ais_vessel_position(
-                pos["mmsi"], pos["lat"], pos["lon"],
-                pos.get("sog", 0), pos.get("cog", 0),
-                pos.get("nav_status", 0), pos["position_ts"],
+                pos.mmsi, pos.lat, pos.lon,
+                pos.sog or 0, pos.cog or 0,
+                pos.nav_status or 0, 
+                pos.position_ts.isoformat() if isinstance(pos.position_ts, datetime) else pos.position_ts,
             )
             if len(_buffer) >= BUFFER_SIZE:
                 _flush_buffer()
@@ -168,7 +169,7 @@ def _handle_message(msg: dict) -> None:
         _handle_static(msg)
 
 
-def _parse_position(msg: dict) -> dict | None:
+def _parse_position(msg: dict) -> schemas.AisPosition | None:
     meta = msg.get("MetaData", {})
     body = msg.get("Message", {}).get("PositionReport", {})
 

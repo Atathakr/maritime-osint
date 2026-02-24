@@ -132,3 +132,43 @@ class StsDetectRequest(BaseModel):
     hours_back: int = Field(48, gt=0, le=168)
     max_distance_km: float = Field(0.926, gt=0)
     max_sog: float = Field(3.0, gt=0)
+
+
+# ── API Response / Result Schemas ─────────────────────────────────────────
+
+class ScreeningHit(BaseModel):
+    """A single sanctions match result."""
+    canonical_id: str
+    entity_name: str
+    imo_number: str | None = None
+    mmsi: str | None = None
+    vessel_type: str | None = None
+    flag_state: str | None = None
+    source_tags: list[str] = Field(default_factory=list)
+    program: str | None = None
+    match_method: str
+    match_confidence: str
+    memberships: list[dict] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+
+
+class ScreeningResult(BaseModel):
+    """Complete vessel screening report."""
+    query: str
+    query_type: str
+    sanctioned: bool
+    total_hits: int
+    hits: list[ScreeningHit]
+    error: str | None = None
+
+
+class VesselDetail(BaseModel):
+    """Deep detail report for a specific vessel."""
+    imo_number: str
+    vessel: dict | None = None
+    sanctions_hits: list[ScreeningHit] = Field(default_factory=list)
+    source_tags: list[str] = Field(default_factory=list)
+    total_memberships: int = 0
+    risk_factors: list[str] = Field(default_factory=list)
+    risk_score: int = 0
+    sanctioned: bool = False

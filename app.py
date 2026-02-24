@@ -111,7 +111,7 @@ def api_screen():
         return jsonify({"error": e.errors()}), 400
 
     result = screening.screen(data.query)
-    return jsonify(result)
+    return jsonify(result.model_dump())
 
 
 @app.get("/api/screen/<path:imo>")
@@ -119,7 +119,7 @@ def api_screen():
 def api_screen_imo(imo):
     """Full screening report for a specific vessel by IMO number."""
     result = screening.screen_vessel_detail(imo)
-    return jsonify(result)
+    return jsonify(result.model_dump())
 
 
 # ── Sanctions browser ─────────────────────────────────────────────────────

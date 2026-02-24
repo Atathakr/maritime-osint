@@ -17,6 +17,7 @@ vessel) with attached memberships list for data lineage.  Each hit includes:
 import re
 
 import db
+import schemas
 
 
 def _clean_imo(raw: str) -> str | None:
@@ -79,7 +80,7 @@ def _annotate_hit(hit: dict, query_type: str) -> None:
         hit["memberships"] = []
 
 
-def screen(query: str) -> dict:
+def screen(query: str) -> schemas.ScreeningResult:
     """
     Screen a vessel against all loaded sanctions lists.
 
@@ -88,20 +89,13 @@ def screen(query: str) -> dict:
       - MMSI (9 digits)
       - Vessel name (partial match)
 
-    Returns a dict with:
-      - query, query_type
-      - sanctioned (bool)
-      - total_hits (int)
-      - hits (list of canonical vessel dicts), each containing:
-          canonical_id, entity_name, imo_number, mmsi, vessel_type, flag_state,
-          source_tags    — list of display labels, e.g. ["OFAC SDN", "EU", "UN SC"]
-          memberships    — per-source rows for data lineage (future profile use)
-          match_method   — "imo_exact" | "mmsi_exact" | "single_source"
-          match_confidence — human-readable label added by this function
+    Returns a ScreeningResult model.
     """
     query = query.strip()
     if not query:
-        return {"error": "Empty query", "hits": []}
+        return schemas.ScreeningResult(
+            query="", query_type="name", sanctioned=False, total_hits=0, hits=[], error="Empty query"
+        )
 
     query_type = _detect_query_type(query)
     hits: list[dict] = []
@@ -115,73 +109,73 @@ def screen(query: str) -> dict:
     else:
         hits = db.search_sanctions_by_name(query)
 
-    # If an IMO/MMSI query returned nothing, try a name fallback so that
-    # e.g. "9876543" typed as a vessel name still finds partial matches.
+    # If an IMO/MMSI query returned nothing, try a name fallback
     if not hits and query_type in ("imo", "mmsi"):
         fallback = db.search_sanctions_by_name(query)
         if fallback:
             hits = fallback
             query_type = f"{query_type}_name_fallback"
 
+    sanitized_hits = []
     for hit in hits:
         _annotate_hit(hit, query_type)
+        try:
+            sanitized_hits.append(schemas.ScreeningHit.model_validate(hit))
+        except Exception:
+            # Skip invalid hits for now, log if needed
+            continue
 
-    return {
-        "query":      query,
-        "query_type": query_type,
-        "sanctioned": len(hits) > 0,
-        "total_hits": len(hits),
-        "hits":       hits,
-    }
+    return schemas.ScreeningResult(
+        query=query,
+        query_type=query_type,
+        sanctioned=len(sanitized_hits) > 0,
+        total_hits=len(sanitized_hits),
+        hits=sanitized_hits,
+    )
 
 
-def screen_vessel_detail(imo: str) -> dict:
+def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     """
     Full screening report for a known vessel (by IMO).
     Fetches the canonical vessel record plus all sanctions list memberships.
 
-    Returns:
-      - vessel        — canonical vessel record (from vessels_canonical)
-      - sanctions_hits — list of canonical hit dicts (typically one for IMO lookup),
-                         each with attached memberships for data lineage
-      - source_tags   — merged, de-duplicated list of all sanctioning bodies
-      - total_memberships — total count of individual list entries across all hits
-      - risk_factors  — human-readable risk indicator strings
-      - risk_score    — 0–100 preliminary score (cross-list breadth × 25, capped)
-      - sanctioned    — bool
+    Returns a VesselDetail model.
     """
-    imo = re.sub(r"\D", "", imo)
-    vessel = db.get_vessel(imo)
-    sanctions_hits = db.search_sanctions_by_imo(imo)
+    imo_clean = re.sub(r"\D", "", imo)
+    vessel = db.get_vessel(imo_clean)
+    sanctions_hits = db.search_sanctions_by_imo(imo_clean)
 
+    processed_hits = []
     for hit in sanctions_hits:
         _annotate_hit(hit, "imo")
+        try:
+            processed_hits.append(schemas.ScreeningHit.model_validate(hit))
+        except Exception:
+            continue
 
-    # Collect all unique source-list display labels across every hit and
-    # count total individual membership rows (cross-list breadth signal).
+    # Collect all unique source-list display labels
     all_tags: list[str] = []
     total_memberships = 0
-    for h in sanctions_hits:
-        for tag in (h.get("source_tags") or []):
+    for h in processed_hits:
+        for tag in h.source_tags:
             if tag not in all_tags:
                 all_tags.append(tag)
-        total_memberships += len(h.get("memberships") or [])
+        total_memberships += len(h.memberships)
 
     risk_factors: list[str] = []
     if all_tags:
         risk_factors.append(f"Listed on: {', '.join(sorted(all_tags))}")
 
-    # Risk score: 25 points per distinct membership row, capped at 100.
-    # A vessel on OFAC + EU + UN SC scores 75; adding a fourth list maxes it.
+    # Risk score calculation
     risk_score = min(total_memberships * 25, 100)
 
-    return {
-        "imo_number":        imo,
-        "vessel":            vessel,
-        "sanctions_hits":    sanctions_hits,
-        "source_tags":       all_tags,
-        "total_memberships": total_memberships,
-        "risk_factors":      risk_factors,
-        "risk_score":        risk_score,
-        "sanctioned":        len(sanctions_hits) > 0,
-    }
+    return schemas.VesselDetail(
+        imo_number=imo_clean,
+        vessel=vessel,
+        sanctions_hits=processed_hits,
+        source_tags=all_tags,
+        total_memberships=total_memberships,
+        risk_factors=risk_factors,
+        risk_score=risk_score,
+        sanctioned=len(processed_hits) > 0,
+    )
