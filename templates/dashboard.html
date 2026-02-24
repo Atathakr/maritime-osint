@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Maritime OSINT</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Leaflet 1.9.4 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs=" crossorigin=""></script>
 </head>
 <body>
 
@@ -71,9 +76,7 @@
     </div>
   </div>
 
-  <div class="two-col">
-
-    <!-- ── Sanctions Database ──────────────────────────── -->
+  <!-- ── Live Risk Map ─────────────────────────────────── -->\n  <div class="panel" id="map-panel">\n    <div class="panel-header">\n      <span class="panel-title">Live Risk Map</span>\n      <span id="map-vessel-count" class="text-muted" style="font-size:.72rem;"></span>\n    </div>\n    <div class="panel-body" style="padding-bottom:.5rem;">\n\n      <!-- Controls bar -->\n      <div class="map-controls">\n        <div class="map-filter-group">\n          <button class="map-filter-btn active" data-filter="all"     onclick="setMapFilter(this)">All</button>\n          <button class="map-filter-btn"         data-filter="medium_plus" onclick="setMapFilter(this)">Medium+</button>\n          <button class="map-filter-btn"         data-filter="high_plus"   onclick="setMapFilter(this)">High+</button>\n          <button class="map-filter-btn"         data-filter="sanctioned"  onclick="setMapFilter(this)">Sanctioned</button>\n        </div>\n        <div style="display:flex;gap:.5rem;align-items:center;">\n          <label class="map-overlay-toggle" style="font-size:.72rem;">\n            <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">\n            OpenSeaMap\n          </label>\n          <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>\n        </div>\n        <div class="map-legend">\n          <span class="legend-dot" style="background:#e84040;"></span>Sanctioned/Critical\n          <span class="legend-dot" style="background:#f97316;"></span>High\n          <span class="legend-dot" style="background:#eab308;"></span>Medium\n          <span class="legend-dot" style="background:#475569;"></span>Clean\n        </div>\n      </div>\n\n      <!-- Map container -->\n      <div id="risk-map"></div>\n\n    </div>\n  </div>\n\n  <div class="two-col">\n\n    <!-- ── Sanctions Database ──────────────────────────── -->
     <div class="panel" style="grid-column: 1 / -1;">
       <div class="panel-header">
         <span class="panel-title">Sanctions Database</span>
@@ -378,5 +381,6 @@
 </main>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='map.js') }}"></script>
 </body>
 </html>

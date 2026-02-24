@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAisVessels();
   loadDarkPeriods();
   loadStsEvents();
+  initMap();
 
   // Allow Enter key to trigger screening
   document.getElementById('screen-query').addEventListener('keydown', e => {

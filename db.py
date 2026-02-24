@@ -1826,3 +1826,101 @@ def get_sts_events(
     for r in rows:
         r["sanctions_hit"] = bool(r.get("sanctions_hit"))
     return rows
+
+
+# ── Map data ───────────────────────────────────────────────────────────────
+
+def get_map_vessels_raw(
+    hours: int = 48,
+    dp_days: int = 7,
+    sts_days: int = 7,
+) -> list[dict]:
+    """
+    Return AIS vessel positions for the live risk map.
+
+    Joins each vessel against:
+      - vessels_canonical  → sanctioned flag + source_tags JSON
+      - dark_periods       → worst risk level in last dp_days days
+      - sts_events         → worst risk level in last sts_days days
+
+    Uses correlated subqueries (not JOINs) so there are never duplicate rows.
+
+    Returns a list of dicts with columns:
+        mmsi, imo_number, vessel_name, vessel_type, flag_state,
+        last_lat, last_lon, last_cog, last_sog, last_nav_status,
+        last_seen, destination, call_sign, length, draft,
+        sanctioned (0/1), source_tags (JSON str or None),
+        dp_risk_num (0-4), sts_risk_num (0-4)
+    """
+    if _BACKEND == "sqlite":
+        av_cutoff  = f"datetime('now', '-{hours} hours')"
+        dp_cutoff  = f"datetime('now', '-{dp_days} days')"
+        sts_cutoff = f"datetime('now', '-{sts_days} days')"
+    else:
+        av_cutoff  = f"NOW() - INTERVAL '{hours} hours'"
+        dp_cutoff  = f"NOW() - INTERVAL '{dp_days} days'"
+        sts_cutoff = f"NOW() - INTERVAL '{sts_days} days'"
+
+    query = f"""
+        SELECT
+            av.mmsi,
+            av.imo_number,
+            av.vessel_name,
+            av.vessel_type,
+            av.flag_state,
+            av.last_lat,
+            av.last_lon,
+            av.last_cog,
+            av.last_sog,
+            av.last_nav_status,
+            av.last_seen,
+            av.destination,
+            av.call_sign,
+            av.length,
+            av.draft,
+            CASE WHEN EXISTS (
+                SELECT 1 FROM vessels_canonical vc
+                WHERE vc.mmsi = av.mmsi
+                   OR (av.imo_number IS NOT NULL
+                       AND av.imo_number != ''
+                       AND vc.imo_number = av.imo_number)
+            ) THEN 1 ELSE 0 END AS sanctioned,
+            (SELECT vc2.source_tags
+             FROM vessels_canonical vc2
+             WHERE vc2.mmsi = av.mmsi
+                OR (av.imo_number IS NOT NULL
+                    AND av.imo_number != ''
+                    AND vc2.imo_number = av.imo_number)
+             LIMIT 1) AS source_tags,
+            COALESCE((
+                SELECT MAX(CASE dp.risk_level
+                    WHEN 'CRITICAL' THEN 4
+                    WHEN 'HIGH'     THEN 3
+                    WHEN 'MEDIUM'   THEN 2
+                    WHEN 'LOW'      THEN 1
+                    ELSE 0 END)
+                FROM dark_periods dp
+                WHERE dp.mmsi = av.mmsi
+                  AND dp.gap_start >= {dp_cutoff}
+            ), 0) AS dp_risk_num,
+            COALESCE((
+                SELECT MAX(CASE se.risk_level
+                    WHEN 'CRITICAL' THEN 4
+                    WHEN 'HIGH'     THEN 3
+                    WHEN 'MEDIUM'   THEN 2
+                    WHEN 'LOW'      THEN 1
+                    ELSE 0 END)
+                FROM sts_events se
+                WHERE (se.mmsi1 = av.mmsi OR se.mmsi2 = av.mmsi)
+                  AND se.event_ts >= {sts_cutoff}
+            ), 0) AS sts_risk_num
+        FROM ais_vessels av
+        WHERE av.last_lat IS NOT NULL
+          AND av.last_lon IS NOT NULL
+          AND av.last_seen >= {av_cutoff}
+    """
+
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query)
+        return _rows(c)

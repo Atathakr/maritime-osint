@@ -18,6 +18,7 @@ import dark_periods
 import noaa_ingest
 import sts_detection
 import reconcile
+import map_data
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
@@ -406,6 +407,37 @@ def api_sts_events():
         offset=int(request.args.get("offset", 0)),
     )
     return jsonify(rows)
+
+
+# ── Map ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/map/vessels")
+@login_required
+def api_map_vessels():
+    """
+    Vessel positions + composite risk for the live maritime map.
+
+    Query params:
+        hours        — AIS recency window (default 48)
+        dp_days      — dark-period look-back window in days (default 7)
+        sts_days     — STS-event look-back window in days (default 7)
+        risk_filter  — all | medium_plus | high_plus | sanctioned (default all)
+    """
+    try:
+        hours       = int(request.args.get("hours",       48))
+        dp_days     = int(request.args.get("dp_days",      7))
+        sts_days    = int(request.args.get("sts_days",     7))
+        risk_filter = request.args.get("risk_filter", "all")
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Invalid parameters: {exc}"}), 400
+
+    vessels = map_data.get_map_vessels(
+        hours=hours,
+        dp_days=dp_days,
+        sts_days=sts_days,
+        risk_filter=risk_filter,
+    )
+    return jsonify({"vessels": vessels, "count": len(vessels)})
 
 
 # ── Reconciliation ────────────────────────────────────────────────────────
