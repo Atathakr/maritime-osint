@@ -102,7 +102,6 @@ _FLAG_MAP: dict[str, str] = {
     "co": "Colombia",
     "mx": "Mexico",
     "br": "Brazil",
-    "pa": "Panama",
     "bm": "Bermuda",
     "ky": "Cayman Islands",
     # Africa

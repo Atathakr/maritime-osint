@@ -48,7 +48,6 @@ def _sqlite_path() -> str:
 def _get_pool():
     global _POOL
     if _POOL is None:
-        import psycopg2
         from psycopg2.pool import ThreadedConnectionPool
         url = _DB_URL.replace("postgres://", "postgresql://", 1)
         _POOL = ThreadedConnectionPool(1, 10, dsn=url)
@@ -855,7 +854,6 @@ def _screen_canonical(where_clause: str, params: list) -> list[dict]:
     Attaches all sanctions_memberships as a sub-list and synthesises
     backward-compatible fields (list_name, flag_state, program, entity_type).
     """
-    p = "?" if _BACKEND == "sqlite" else "%s"
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(f"""
@@ -1022,10 +1020,9 @@ def find_mmsi_imo_collisions() -> list[tuple[str, str]]:
     Tier 2: find MMSI-keyed canonicals whose MMSI value also appears in
     an IMO-keyed canonical.  Returns list of (mmsi_canonical_id, imo_canonical_id).
     """
-    p = "?" if _BACKEND == "sqlite" else "%s"
     with _conn() as conn:
         c = _cursor(conn)
-        c.execute(f"""
+        c.execute("""
             SELECT a.canonical_id AS mmsi_cid,
                    b.canonical_id AS imo_cid
             FROM vessels_canonical a
@@ -1287,7 +1284,6 @@ def insert_ais_positions(positions: list[dict]) -> int:
     """Batch-insert AIS positions. Silently skips duplicates. Returns insert count."""
     if not positions:
         return 0
-    p = "?" if _BACKEND == "sqlite" else "%s"
     inserted = 0
     with _conn() as conn:
         c = conn.cursor()
@@ -1310,7 +1306,7 @@ def insert_ais_positions(positions: list[dict]) -> int:
                     ))
                     inserted += c.rowcount
                 else:
-                    c.execute(f"""
+                    c.execute("""
                         INSERT OR IGNORE INTO ais_positions
                             (mmsi, imo_number, vessel_name, vessel_type,
                              lat, lon, sog, cog, heading, nav_status, source, position_ts)
@@ -1331,8 +1327,6 @@ def insert_ais_positions(positions: list[dict]) -> int:
 
 def upsert_ais_vessel(mmsi: str, data: dict) -> None:
     """Insert or update current vessel state from a ShipStaticData message."""
-    p = "?" if _BACKEND == "sqlite" else "%s"
-    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
     with _conn() as conn:
         c = conn.cursor()
         if _BACKEND == "postgres":
@@ -1361,7 +1355,7 @@ def upsert_ais_vessel(mmsi: str, data: dict) -> None:
             # SQLite: check-then-update or insert
             c.execute("SELECT mmsi FROM ais_vessels WHERE mmsi=?", (mmsi,))
             if c.fetchone():
-                c.execute(f"""
+                c.execute("""
                     UPDATE ais_vessels SET
                         imo_number  = COALESCE(?, imo_number),
                         vessel_name = COALESCE(?, vessel_name),
@@ -1398,8 +1392,6 @@ def update_ais_vessel_position(mmsi: str, lat: float, lon: float,
                                 sog: float, cog: float,
                                 nav_status: int, ts: str) -> None:
     """Update last-seen position on the ais_vessels current-state row."""
-    p = "?" if _BACKEND == "sqlite" else "%s"
-    now_expr = "datetime('now')" if _BACKEND == "sqlite" else "NOW()"
     with _conn() as conn:
         c = conn.cursor()
         if _BACKEND == "postgres":
@@ -1541,7 +1533,6 @@ def find_ais_gaps(mmsi: str | None = None, min_hours: float = 2.0,
 
 def upsert_dark_periods(periods: list[dict]) -> int:
     """Persist detected dark periods. Returns count inserted."""
-    p = "?" if _BACKEND == "sqlite" else "%s"
     inserted = 0
     with _conn() as conn:
         c = conn.cursor()
@@ -1656,7 +1647,6 @@ def get_ais_positions(mmsi: str | None = None, limit: int = 200,
 
 def get_active_mmsis(days: int = 30) -> list[str]:
     """Return distinct MMSIs seen within the last N days."""
-    p = "?" if _BACKEND == "sqlite" else "%s"
     cutoff_expr = (
         f"datetime('now', '-{days} days')"
         if _BACKEND == "sqlite"

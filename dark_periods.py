@@ -18,6 +18,7 @@ import logging
 import math
 
 import db
+import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +100,29 @@ def run_detection(mmsi: str | None = None,
             sanctions_hits += db.search_sanctions_by_mmsi(mmsi_val)
         if imo_val and not sanctions_hits:
             sanctions_hits += db.search_sanctions_by_imo(imo_val)
-        gap["sanctions_hit"] = bool(sanctions_hits)
+        sanctions_hit = bool(sanctions_hits)
 
-        gap["indicator_code"] = "IND1"
-        enriched.append(gap)
+        try:
+            dp = schemas.DarkPeriod(
+                mmsi=mmsi_val,
+                imo_number=imo_val,
+                vessel_name=gap.get("vessel_name"),
+                gap_start=gap["gap_start"],
+                gap_end=gap["gap_end"],
+                gap_hours=gap_h,
+                last_lat=gap.get("last_lat"),
+                last_lon=gap.get("last_lon"),
+                reappear_lat=gap.get("reappear_lat"),
+                reappear_lon=gap.get("reappear_lon"),
+                distance_km=gap["distance_km"],
+                risk_zone=gap["risk_zone"],
+                risk_level=gap["risk_level"],
+                sanctions_hit=sanctions_hit,
+                indicator_code="IND1",
+            )
+            enriched.append(dp.model_dump())
+        except Exception as e:
+            logger.debug("Validation failed for dark period MMSI %s: %s", mmsi_val, e)
 
     # Persist
     inserted = db.upsert_dark_periods(enriched)

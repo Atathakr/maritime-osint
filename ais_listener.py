@@ -15,10 +15,11 @@ WebSocket docs:         https://aisstream.io/documentation
 import asyncio
 import json
 import logging
-import os
 import re
 import threading
 from datetime import datetime, timezone
+
+import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -187,19 +188,23 @@ def _parse_position(msg: dict) -> dict | None:
     except Exception:
         ts = datetime.now(timezone.utc)
 
-    return {
-        "mmsi":        mmsi,
-        "vessel_name": (meta.get("ShipName") or "").strip() or None,
-        "vessel_type": meta.get("ShipType"),
-        "lat":         lat,
-        "lon":         lon,
-        "sog":         body.get("Sog"),
-        "cog":         body.get("Cog"),
-        "heading":     body.get("TrueHeading"),
-        "nav_status":  body.get("NavigationalStatus"),
-        "source":      "aisstream",
-        "position_ts": ts.isoformat(),
-    }
+    try:
+        return schemas.AisPosition(
+            mmsi=mmsi,
+            vessel_name=(meta.get("ShipName") or "").strip() or None,
+            vessel_type=meta.get("ShipType"),
+            lat=lat,
+            lon=lon,
+            sog=body.get("Sog"),
+            cog=body.get("Cog"),
+            heading=body.get("TrueHeading"),
+            nav_status=body.get("NavigationalStatus"),
+            source="aisstream",
+            position_ts=ts,
+        )
+    except Exception as e:
+        logger.debug("Validation failed for position MMSI %s: %s", mmsi, e)
+        return None
 
 
 def _handle_static(msg: dict) -> None:
@@ -218,28 +223,30 @@ def _handle_static(msg: dict) -> None:
     width  = (dim.get("C") or 0) + (dim.get("D") or 0) or None
 
     try:
+        vessel_data = schemas.AisVesselStatic(
+            mmsi=mmsi,
+            imo_number=imo,
+            vessel_name=((static.get("Name") or meta.get("ShipName") or "")).strip() or None,
+            vessel_type=static.get("Type"),
+            call_sign=(static.get("CallSign") or "").strip() or None,
+            length=length,
+            width=width,
+            draft=static.get("MaximumStaticDraught"),
+            destination=(static.get("Destination") or "").strip() or None,
+            eta=_format_eta(static.get("Eta")),
+        )
         import db
-        db.upsert_ais_vessel(mmsi, {
-            "imo_number":  imo,
-            "vessel_name": ((static.get("Name") or meta.get("ShipName") or "")).strip() or None,
-            "vessel_type": static.get("Type"),
-            "call_sign":   (static.get("CallSign") or "").strip() or None,
-            "length":      length,
-            "width":       width,
-            "draft":       static.get("MaximumStaticDraught"),
-            "destination": (static.get("Destination") or "").strip() or None,
-            "eta":         _format_eta(static.get("Eta")),
-        })
+        db.upsert_ais_vessel(mmsi, vessel_data.model_dump())
         _stats["static_updates"] += 1
     except Exception as e:
-        logger.debug("Static update failed for MMSI %s: %s", mmsi, e)
+        logger.debug("Static update/validation failed for MMSI %s: %s", mmsi, e)
 
 
 def _flush_buffer() -> None:
     global _buffer
     if not _buffer:
         return
-    batch   = _buffer[:]
+    batch   = [p.model_dump() for p in _buffer]
     _buffer = []
     try:
         import db

@@ -14,7 +14,7 @@ from typing import Generator
 
 import requests
 
-import normalize
+import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -140,20 +140,25 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
         if owner_operator:
             identifiers["owner_operator"] = owner_operator
 
-        entries.append({
-            "source_id":    uid,
-            "entity_type":  "Vessel" if sdn_type == "Vessel" else sdn_type,
-            "entity_name":  name,
-            "imo_number":   imo_number,
-            "mmsi":         mmsi,
-            "vessel_type":  vessel_type,
-            "flag_state":   flag_state,
-            "call_sign":    call_sign,
-            "program":      ", ".join(programs),
-            "gross_tonnage": gross_tonnage,
-            "aliases":      aliases,
-            "identifiers":  identifiers,
-        })
+        try:
+            entry = schemas.SanctionsEntry(
+                list_name="OFAC_SDN",
+                source_id=uid,
+                entity_name=name,
+                entity_type="Vessel" if sdn_type == "Vessel" else sdn_type,
+                imo_number=imo_number,
+                mmsi=mmsi,
+                vessel_type=vessel_type,
+                flag_state=flag_state,
+                call_sign=call_sign,
+                program=", ".join(programs),
+                gross_tonnage=gross_tonnage,
+                aliases=aliases,
+                identifiers=identifiers,
+            )
+            entries.append(entry.model_dump())
+        except Exception as e:
+            logger.debug("Validation failed for OFAC entry %s: %s", uid, e)
 
     logger.info("Parsed %d OFAC SDN vessel entries", len(entries))
     return entries
@@ -214,23 +219,27 @@ def fetch_opensanctions_vessels() -> list[dict]:
         primary = all_names[0] if all_names else name
         aliases = list({n for n in all_names[1:] + props.get("alias", []) if n != primary})
 
-        entries.append({
-            "source_id":    obj["id"],
-            "entity_type":  "Vessel",
-            "entity_name":  primary or name,
-            "imo_number":   imo_number,
-            "mmsi":         mmsi,
-            "vessel_type":  vessel_type,
-            "flag_state":   flag_raw,
-            "call_sign":    call_sign,
-            "program":      ", ".join(programs[:5]),
-            "gross_tonnage": None,
-            "aliases":      aliases[:15],
-            "identifiers":  {
-                "topics":   props.get("topics", []),
-                "datasets": datasets,          # full list, no truncation
-            },
-        })
+        try:
+            entry = schemas.SanctionsEntry(
+                list_name="OpenSanctions",
+                source_id=obj["id"],
+                entity_name=primary or name,
+                entity_type="Vessel",
+                imo_number=imo_number,
+                mmsi=mmsi,
+                vessel_type=vessel_type,
+                flag_state=flag_raw,
+                call_sign=call_sign,
+                program=", ".join(programs[:5]),
+                aliases=aliases[:15],
+                identifiers={
+                    "topics":   props.get("topics", []),
+                    "datasets": datasets,
+                },
+            )
+            entries.append(entry.model_dump())
+        except Exception as e:
+            logger.debug("Validation failed for OpenSanctions entry %s: %s", obj["id"], e)
 
     logger.info(
         "Scanned %d OpenSanctions entities, extracted %d vessels",
