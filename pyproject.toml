@@ -1,0 +1,54 @@
+[project]
+name = "maritime-osint"
+version = "0.1.0"
+description = "Maritime OSINT platform for sanctions screening and AIS tracking"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.28.0",
+    "python-dotenv>=1.0.0",
+    "flask>=3.1.0",
+    "anthropic>=0.40.0",
+    "gunicorn>=22.0.0",
+    "psycopg2-binary>=2.9.0",
+    "lxml>=5.0.0",
+    "websockets>=12.0",
+]
+
+[tool.ruff]
+# Target Python version — must match Railway/Nixpacks python311 build
+target-version = "py311"
+
+# Line length
+line-length = 100
+
+[tool.ruff.lint]
+# Rules to enable
+select = ["ALL"]
+
+# Rules to ignore
+ignore = [
+    "D",      # Missing docstrings
+    "ANN",    # Missing type annotations
+    "T201",   # Print statements
+    "COM812", # Missing trailing comma (conflicts with formatter)
+    "ISC001", # Single line implicit string concatenation (conflicts with formatter)
+    "ERA001", # Commented out code (falsely flags helpful comments)
+    "FIX",    # TODOs
+    "TD",     # TODOs
+    "SLF001", # Private member access
+    "PLR2004",# Magic values
+    "FBT",    # Boolean positional arguments
+    "S608",   # Possible SQL injection (using string formatting for backend-agnostic SQL)
+    "BLE001", # Catching blind Exception
+    "S110",   # try-except-pass
+    "S112",   # try-except-continue
+    "PTH",    # Use Pathlib (nice to have, but not a priority)
+    "PLR",    # Refactoring rules (too subjective for initial lint)
+    "PLW",    # Pylint warnings (too many globals/overwrites)
+    "PLC0415",# Inline imports (used for lazy-loading in this project)
+    "S314",   # xml vulnerability (using standard library xml)
+    "S104",   # Binding to all interfaces (common in dev apps)
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
