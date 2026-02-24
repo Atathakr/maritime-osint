@@ -125,7 +125,7 @@ async def _listen_loop(api_key: str) -> None:
                         break
                     try:
                         _handle_message(json.loads(raw))
-                    except Exception as e:
+                    except json.JSONDecodeError as e:
                         _stats["errors"] += 1
                         logger.debug("AIS message parse error: %s", e)
 
@@ -183,7 +183,7 @@ def _parse_position(msg: dict) -> dict | None:
     ts_raw = meta.get("time_utc", "")
     try:
         ts = datetime.strptime(ts_raw[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-    except Exception:
+    except (ValueError, TypeError):
         ts = datetime.now(UTC)
 
     return {
@@ -265,5 +265,5 @@ def _format_eta(eta: dict | None) -> str | None:
             f"{int(eta.get('Month', 0)):02d}/{int(eta.get('Day', 0)):02d} "
             f"{int(eta.get('Hour', 0)):02d}:{int(eta.get('Minute', 0)):02d}"
         )
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None

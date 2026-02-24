@@ -47,7 +47,6 @@ ignore = [
     "PLW",    # Pylint warnings (too many globals/overwrites)
     "PLC0415",# Inline imports (used for lazy-loading in this project)
     "S314",   # xml vulnerability (using standard library xml)
-    "RET503", # Missing explicit return (common in before_request)
     "S104",   # Binding to all interfaces (common in dev apps)
 ]
 

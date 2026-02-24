@@ -69,7 +69,7 @@ def fetch_and_ingest(year: int, month: int, zone: int,
     try:
         resp = requests.get(url, timeout=300, stream=True)
         resp.raise_for_status()
-    except Exception as e:
+    except requests.RequestException as e:
         stats["error"] = str(e)
         return stats
 

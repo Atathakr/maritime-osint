@@ -824,7 +824,7 @@ def get_sanctions_entries(
             if isinstance(r.get(field), str):
                 try:
                     r[field] = json.loads(r[field])
-                except Exception:
+                except json.JSONDecodeError:
                     r[field] = []
         # Backward-compat: expose first tag as list_name
         tags = r.get("source_tags") or []
@@ -876,7 +876,7 @@ def _screen_canonical(where_clause: str, params: list) -> list[dict]:
             if isinstance(can.get(field), str):
                 try:
                     can[field] = json.loads(can[field])
-                except Exception:
+                except json.JSONDecodeError:
                     can[field] = []
         memberships = get_vessel_memberships(can["canonical_id"])
         can["memberships"] = memberships
@@ -961,7 +961,7 @@ def get_vessels(q: str | None = None, limit: int = 100, offset: int = 0) -> list
         if isinstance(r.get("source_tags"), str):
             try:
                 r["source_tags"] = json.loads(r["source_tags"])
-            except Exception:
+            except json.JSONDecodeError:
                 r["source_tags"] = []
     return rows
 
@@ -979,7 +979,7 @@ def get_vessel(imo: str) -> dict | None:
             if isinstance(r.get(field), str):
                 try:
                     r[field] = json.loads(r[field])
-                except Exception:
+                except json.JSONDecodeError:
                     r[field] = []
     return r
 
@@ -1014,7 +1014,7 @@ def get_vessel_memberships(canonical_id: str) -> list[dict]:
         if isinstance(r.get("identifiers"), str):
             try:
                 r["identifiers"] = json.loads(r["identifiers"])
-            except Exception:
+            except json.JSONDecodeError:
                 r["identifiers"] = {}
     return rows
 
@@ -1107,7 +1107,7 @@ def merge_canonical(source_id: str, target_id: str) -> None:
             if isinstance(val, str):
                 try:
                     return json.loads(val)
-                except Exception:
+                except json.JSONDecodeError:
                     return []
             return val or []
 

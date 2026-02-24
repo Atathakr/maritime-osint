@@ -181,7 +181,7 @@ def parse_source_tags(list_name: str, identifiers: dict | str | None) -> list[st
     if isinstance(identifiers, str):
         try:
             identifiers = json.loads(identifiers)
-        except Exception:
+        except json.JSONDecodeError:
             identifiers = {}
 
     if not identifiers:
@@ -191,7 +191,7 @@ def parse_source_tags(list_name: str, identifiers: dict | str | None) -> list[st
     if isinstance(raw_datasets, str):
         try:
             raw_datasets = json.loads(raw_datasets)
-        except Exception:
+        except json.JSONDecodeError:
             raw_datasets = []
 
     tags: list[str] = []

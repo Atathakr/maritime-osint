@@ -53,6 +53,7 @@ def check_auth():
         and not any(request.path.startswith(p) for p in open_paths)
     ):
         return redirect(url_for("login"))
+    return None
 
 
 @app.get("/login")

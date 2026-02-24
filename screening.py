@@ -67,7 +67,7 @@ def _annotate_hit(hit: dict, query_type: str) -> None:
         if isinstance(val, str):
             try:
                 hit[field] = json.loads(val)
-            except Exception:
+            except json.JSONDecodeError:
                 hit[field] = []
 
     # Ensure source_tags is never None or missing — JS rendering depends on it
