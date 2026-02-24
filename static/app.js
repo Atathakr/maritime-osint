@@ -17,7 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAisVessels();
   loadDarkPeriods();
   loadStsEvents();
-  initMap();
+  // Defer map init so the rest of the page loads first
+  setTimeout(initMap, 1500);
 
   // Allow Enter key to trigger screening
   document.getElementById('screen-query').addEventListener('keydown', e => {

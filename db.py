@@ -1834,23 +1834,20 @@ def get_map_vessels_raw(
     hours: int = 48,
     dp_days: int = 7,
     sts_days: int = 7,
+    limit: int = 1000,
 ) -> list[dict]:
     """
     Return AIS vessel positions for the live risk map.
 
-    Joins each vessel against:
-      - vessels_canonical  → sanctioned flag + source_tags JSON
-      - dark_periods       → worst risk level in last dp_days days
-      - sts_events         → worst risk level in last sts_days days
+    Uses CTEs to pre-aggregate dark_periods and sts_events once, then
+    LEFT JOINs — avoids the O(n) correlated-subquery scan that was
+    issuing ~20 000 sub-executions for a 5 k vessel table.
 
-    Uses correlated subqueries (not JOINs) so there are never duplicate rows.
+    Sanctions is kept as a correlated subquery because vessels_canonical
+    is small (~2 500 rows) and an OR-join against it would fan out rows.
 
-    Returns a list of dicts with columns:
-        mmsi, imo_number, vessel_name, vessel_type, flag_state,
-        last_lat, last_lon, last_cog, last_sog, last_nav_status,
-        last_seen, destination, call_sign, length, draft,
-        sanctioned (0/1), source_tags (JSON str or None),
-        dp_risk_num (0-4), sts_risk_num (0-4)
+    Returns up to `limit` rows ordered highest-risk first so the most
+    important vessels always appear when the result is capped.
     """
     if _BACKEND == "sqlite":
         av_cutoff  = f"datetime('now', '-{hours} hours')"
@@ -1861,7 +1858,36 @@ def get_map_vessels_raw(
         dp_cutoff  = f"NOW() - INTERVAL '{dp_days} days'"
         sts_cutoff = f"NOW() - INTERVAL '{sts_days} days'"
 
+    risk_case = """CASE risk_level
+                       WHEN 'CRITICAL' THEN 4
+                       WHEN 'HIGH'     THEN 3
+                       WHEN 'MEDIUM'   THEN 2
+                       WHEN 'LOW'      THEN 1
+                       ELSE 0 END"""
+
     query = f"""
+        WITH
+        -- Pre-aggregate dark period risk per MMSI (one GROUP BY scan)
+        dp_agg AS (
+            SELECT mmsi,
+                   MAX({risk_case}) AS risk_num
+            FROM   dark_periods
+            WHERE  gap_start >= {dp_cutoff}
+            GROUP  BY mmsi
+        ),
+        -- Pre-aggregate STS risk per MMSI (UNION covers both sides)
+        sts_side AS (
+            SELECT mmsi1 AS mmsi, {risk_case} AS rn
+            FROM   sts_events WHERE event_ts >= {sts_cutoff}
+            UNION ALL
+            SELECT mmsi2 AS mmsi, {risk_case} AS rn
+            FROM   sts_events WHERE event_ts >= {sts_cutoff}
+        ),
+        sts_agg AS (
+            SELECT mmsi, MAX(rn) AS risk_num
+            FROM   sts_side
+            GROUP  BY mmsi
+        )
         SELECT
             av.mmsi,
             av.imo_number,
@@ -1878,6 +1904,7 @@ def get_map_vessels_raw(
             av.call_sign,
             av.length,
             av.draft,
+            -- Sanctions: correlated subquery is fine — vessels_canonical is ~2 500 rows
             CASE WHEN EXISTS (
                 SELECT 1 FROM vessels_canonical vc
                 WHERE vc.mmsi = av.mmsi
@@ -1886,38 +1913,31 @@ def get_map_vessels_raw(
                        AND vc.imo_number = av.imo_number)
             ) THEN 1 ELSE 0 END AS sanctioned,
             (SELECT vc2.source_tags
-             FROM vessels_canonical vc2
-             WHERE vc2.mmsi = av.mmsi
-                OR (av.imo_number IS NOT NULL
-                    AND av.imo_number != ''
-                    AND vc2.imo_number = av.imo_number)
+             FROM   vessels_canonical vc2
+             WHERE  vc2.mmsi = av.mmsi
+                OR  (av.imo_number IS NOT NULL
+                     AND av.imo_number != ''
+                     AND vc2.imo_number = av.imo_number)
              LIMIT 1) AS source_tags,
-            COALESCE((
-                SELECT MAX(CASE dp.risk_level
-                    WHEN 'CRITICAL' THEN 4
-                    WHEN 'HIGH'     THEN 3
-                    WHEN 'MEDIUM'   THEN 2
-                    WHEN 'LOW'      THEN 1
-                    ELSE 0 END)
-                FROM dark_periods dp
-                WHERE dp.mmsi = av.mmsi
-                  AND dp.gap_start >= {dp_cutoff}
-            ), 0) AS dp_risk_num,
-            COALESCE((
-                SELECT MAX(CASE se.risk_level
-                    WHEN 'CRITICAL' THEN 4
-                    WHEN 'HIGH'     THEN 3
-                    WHEN 'MEDIUM'   THEN 2
-                    WHEN 'LOW'      THEN 1
-                    ELSE 0 END)
-                FROM sts_events se
-                WHERE (se.mmsi1 = av.mmsi OR se.mmsi2 = av.mmsi)
-                  AND se.event_ts >= {sts_cutoff}
-            ), 0) AS sts_risk_num
-        FROM ais_vessels av
-        WHERE av.last_lat IS NOT NULL
-          AND av.last_lon IS NOT NULL
+            COALESCE(dp.risk_num,  0) AS dp_risk_num,
+            COALESCE(sts.risk_num, 0) AS sts_risk_num
+        FROM  ais_vessels av
+        LEFT  JOIN dp_agg  dp  ON dp.mmsi  = av.mmsi
+        LEFT  JOIN sts_agg sts ON sts.mmsi = av.mmsi
+        WHERE av.last_lat  IS NOT NULL
+          AND av.last_lon  IS NOT NULL
           AND av.last_seen >= {av_cutoff}
+        ORDER BY
+            -- Sanctioned vessels first, then highest behavioural risk
+            CASE WHEN EXISTS (
+                SELECT 1 FROM vessels_canonical vc2
+                WHERE vc2.mmsi = av.mmsi
+                   OR (av.imo_number IS NOT NULL
+                       AND av.imo_number != ''
+                       AND vc2.imo_number = av.imo_number)
+            ) THEN 1 ELSE 0 END DESC,
+            COALESCE(dp.risk_num, 0) + COALESCE(sts.risk_num, 0) DESC
+        LIMIT {limit}
     """
 
     with _conn() as conn:

@@ -15,11 +15,11 @@
   let _map          = null;
   let _markers      = null;   // L.LayerGroup for vessel markers
   let _openSeaLayer = null;
-  let _currentFilter = "all";
+  let _currentFilter = "medium_plus";
   let _refreshTimer  = null;
   let _vessels       = [];    // last fetched vessel list
 
-  const REFRESH_MS = 30_000;
+  const REFRESH_MS = 60_000;
 
   // ── Tile layers ──────────────────────────────────────────────────────────
   const CARTO_DARK = L.tileLayer(
@@ -135,7 +135,7 @@
 
   // ── Fetch & render ───────────────────────────────────────────────────────
   async function fetchVessels() {
-    const url = `/api/map/vessels?hours=48&dp_days=7&sts_days=7&risk_filter=${_currentFilter}`;
+    const url = `/api/map/vessels?hours=720&dp_days=30&sts_days=30&risk_filter=${_currentFilter}`;
     try {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
