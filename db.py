@@ -678,6 +678,98 @@ def _init_sqlite(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_ts   ON spoof_events(detected_at DESC)")
 
 
+# ── Identity Mismatch detection ───────────────────────────────────────────
+
+def find_imo_conflicts(days: int = 30) -> list[dict]:
+    """
+    Find different MMSIs claiming the same IMO number.
+    Returns list of conflicts with last known position and involved MMSIs.
+    """
+    cutoff_expr = (
+        f"datetime('now', '-{days} days')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{days} days'"
+    )
+
+    # Subquery to get unique (imo, mmsi) pairs first
+    subquery = f"""
+        SELECT imo_number, mmsi,
+               MAX(position_ts) as last_seen,
+               MAX(lat) as lat,
+               MAX(lon) as lon,
+               MAX(vessel_name) as vessel_name
+        FROM ais_positions
+        WHERE imo_number IS NOT NULL AND imo_number != ''
+          AND position_ts >= {cutoff_expr}
+        GROUP BY imo_number, mmsi
+    """
+
+    agg_func = "GROUP_CONCAT(mmsi)" if _BACKEND == "sqlite" else "STRING_AGG(mmsi, ', ')"
+
+    query = f"""
+        SELECT
+            imo_number,
+            {agg_func} as mmsis,
+            COUNT(*) as mmsi_count,
+            MAX(last_seen) as last_seen,
+            MAX(lat) as lat,
+            MAX(lon) as lon,
+            MAX(vessel_name) as vessel_name
+        FROM ({subquery}) AS sub
+        GROUP BY imo_number
+        HAVING COUNT(*) > 1
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query)
+        return _rows(c)
+
+
+def find_identity_flips(days: int = 30) -> list[dict]:
+    """
+    Find a single MMSI broadcasting different IMO numbers.
+    Returns list of flips with last known position and involved IMOs.
+    """
+    cutoff_expr = (
+        f"datetime('now', '-{days} days')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{days} days'"
+    )
+
+    # Subquery to get unique (mmsi, imo) pairs first
+    subquery = f"""
+        SELECT mmsi, imo_number,
+               MAX(position_ts) as last_seen,
+               MAX(lat) as lat,
+               MAX(lon) as lon,
+               MAX(vessel_name) as vessel_name
+        FROM ais_positions
+        WHERE imo_number IS NOT NULL AND imo_number != ''
+          AND position_ts >= {cutoff_expr}
+        GROUP BY mmsi, imo_number
+    """
+
+    agg_func = "GROUP_CONCAT(imo_number)" if _BACKEND == "sqlite" else "STRING_AGG(imo_number, ', ')"
+
+    query = f"""
+        SELECT
+            mmsi,
+            {agg_func} as imos,
+            COUNT(*) as imo_count,
+            MAX(last_seen) as last_seen,
+            MAX(lat) as lat,
+            MAX(lon) as lon,
+            MAX(vessel_name) as vessel_name
+        FROM ({subquery}) AS sub
+        GROUP BY mmsi
+        HAVING COUNT(*) > 1
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query)
+        return _rows(c)
+
+
 # ── Canonical vessel registry ─────────────────────────────────────────────
 
 def upsert_sanctions_entries(entries: list[dict], list_name: str) -> tuple[int, int]:
