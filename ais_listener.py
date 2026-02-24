@@ -160,7 +160,7 @@ def _handle_message(msg: dict) -> None:
                 pos.mmsi, pos.lat, pos.lon,
                 pos.sog or 0, pos.cog or 0,
                 pos.nav_status or 0, 
-                pos.position_ts.isoformat() if isinstance(pos.position_ts, datetime) else pos.position_ts,
+                pos.position_ts.isoformat(),
             )
             if len(_buffer) >= BUFFER_SIZE:
                 _flush_buffer()

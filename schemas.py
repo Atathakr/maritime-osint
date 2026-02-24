@@ -1,6 +1,14 @@
+import json
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, FieldSerializationInfo, field_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    FieldSerializationInfo,
+    field_serializer,
+    model_validator,
+)
 
 
 class AisPosition(BaseModel):
@@ -17,13 +25,11 @@ class AisPosition(BaseModel):
     heading: int | None = None
     nav_status: int | None = None
     source: str = "aisstream"
-    position_ts: datetime | str
+    position_ts: datetime
 
-    @field_serializer("position_ts")
-    def serialize_ts(self, ts: datetime | str, _info: FieldSerializationInfo) -> str:
-        if isinstance(ts, datetime):
-            return ts.isoformat()
-        return ts
+    @field_serializer("position_ts", when_used="json")
+    def serialize_ts(self, ts: datetime, _info: FieldSerializationInfo) -> str:
+        return ts.isoformat()
 
 
 class AisVesselStatic(BaseModel):
@@ -68,8 +74,8 @@ class DarkPeriod(BaseModel):
     mmsi: str = Field(..., pattern=r"^\d{9}$")
     imo_number: str | None = Field(None, pattern=r"^\d{7}$")
     vessel_name: str | None = None
-    gap_start: datetime | str
-    gap_end: datetime | str | None = None
+    gap_start: datetime
+    gap_end: datetime | None = None
     gap_hours: float | None = None
     last_lat: float | None = Field(None, ge=-90, le=90)
     last_lon: float | None = Field(None, ge=-180, le=180)
@@ -81,11 +87,9 @@ class DarkPeriod(BaseModel):
     sanctions_hit: bool = False
     indicator_code: str = "IND1"
 
-    @field_serializer("gap_start", "gap_end")
-    def serialize_dates(self, dt: datetime | str | None, _info: FieldSerializationInfo) -> str | None:
-        if isinstance(dt, datetime):
-            return dt.isoformat()
-        return dt
+    @field_serializer("gap_start", "gap_end", when_used="json")
+    def serialize_dates(self, dt: datetime | None, _info: FieldSerializationInfo) -> str | None:
+        return dt.isoformat() if dt else None
 
 
 class StsEvent(BaseModel):
@@ -96,7 +100,7 @@ class StsEvent(BaseModel):
     mmsi2: str = Field(..., pattern=r"^\d{9}$")
     vessel_name1: str | None = None
     vessel_name2: str | None = None
-    event_ts: datetime | str
+    event_ts: datetime
     lat: float | None = Field(None, ge=-90, le=90)
     lon: float | None = Field(None, ge=-180, le=180)
     distance_m: float | None = None
@@ -107,11 +111,9 @@ class StsEvent(BaseModel):
     sanctions_hit: bool = False
     indicator_code: str = "IND7"
 
-    @field_serializer("event_ts")
-    def serialize_event_ts(self, ts: datetime | str, _info: FieldSerializationInfo) -> str:
-        if isinstance(ts, datetime):
-            return ts.isoformat()
-        return ts
+    @field_serializer("event_ts", when_used="json")
+    def serialize_event_ts(self, ts: datetime, _info: FieldSerializationInfo) -> str:
+        return ts.isoformat()
 
 
 # ── API Request Schemas ───────────────────────────────────────────────────
@@ -150,6 +152,25 @@ class ScreeningHit(BaseModel):
     match_confidence: str
     memberships: list[dict] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_json_fields(cls, data: dict) -> dict:
+        """Parse JSON strings for list/dict fields (SQLite fallback)."""
+        if not isinstance(data, dict):
+            return data
+
+        for field in ("aliases", "source_tags", "memberships"):
+            val = data.get(field)
+            if isinstance(val, str):
+                try:
+                    data[field] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    data[field] = []
+            elif val is None:
+                data[field] = []
+
+        return data
 
 
 class ScreeningResult(BaseModel):
