@@ -429,20 +429,14 @@ async function loadAisVessels() {
       const lat = r.last_lat != null ? r.last_lat.toFixed(3) : '—';
       const lon = r.last_lon != null ? r.last_lon.toFixed(3) : '—';
       const seen = r.last_seen ? new Date(r.last_seen).toLocaleString() : '—';
-      return `<tr>
-        <td class="imo" onclick="document.getElementById('screen-query').value='${escAttr(r.mmsi)}';runScreening()" style="cursor:pointer;">${escHtml(r.mmsi)}</td>
-        <td class="name" title="${escAttr(r.vessel_name||'')}" onclick="document.getElementById('screen-query').value='${escAttr(r.vessel_name||r.mmsi)}';runScreening()" style="cursor:pointer;">${escHtml(r.vessel_name||'—')}</td>
+      return `<tr onclick="document.getElementById('screen-query').value='${escAttr(r.imo_number||r.mmsi)}';runScreening()" style="cursor:pointer;">
+        <td class="imo">${escHtml(r.mmsi)}</td>
+        <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
         <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
         <td>${lat}</td>
         <td>${lon}</td>
         <td>${sog}</td>
         <td class="log-time">${escHtml(seen)}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" style="padding:.1rem .4rem;font-size:.65rem;" 
-            onclick="toggleVesselTrack('${escAttr(r.mmsi)}', '${escAttr(r.vessel_name||"Unknown")}'); document.getElementById('map-panel').scrollIntoView({behavior:'smooth'});">
-            Track
-          </button>
-        </td>
         <td>${sanctBadge}</td>
       </tr>`;
     }).join('');
@@ -484,12 +478,6 @@ async function loadDarkPeriods() {
         <td>${hrs}</td>
         <td>${dist}</td>
         <td>${r.risk_zone ? escHtml(r.risk_zone) : '<span class="text-muted">—</span>'}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" style="padding:.1rem .4rem;font-size:.65rem;" 
-            onclick="toggleVesselTrack('${escAttr(r.mmsi)}', '${escAttr(r.vessel_name||"Unknown")}'); document.getElementById('map-panel').scrollIntoView({behavior:'smooth'});">
-            Track
-          </button>
-        </td>
         <td style="color:var(--danger)">${sanc}</td>
       </tr>`;
     }).join('');
@@ -566,18 +554,6 @@ async function loadStsEvents() {
         <td>${sog1}</td>
         <td>${sog2}</td>
         <td>${r.risk_zone ? escHtml(r.risk_zone) : '<span class="text-muted">—</span>'}</td>
-        <td>
-          <div style="display:flex;gap:.25rem;">
-            <button class="btn btn-secondary btn-sm" style="padding:.1rem .3rem;font-size:.65rem;" 
-              onclick="toggleVesselTrack('${escAttr(r.mmsi1)}', '${escAttr(r.vessel_name1||r.mmsi1)}'); document.getElementById('map-panel').scrollIntoView({behavior:'smooth'});">
-              T1
-            </button>
-            <button class="btn btn-secondary btn-sm" style="padding:.1rem .3rem;font-size:.65rem;" 
-              onclick="toggleVesselTrack('${escAttr(r.mmsi2)}', '${escAttr(r.vessel_name2||r.mmsi2)}'); document.getElementById('map-panel').scrollIntoView({behavior:'smooth'});">
-              T2
-            </button>
-          </div>
-        </td>
         <td>${sanc}</td>
       </tr>`;
     }).join('');
