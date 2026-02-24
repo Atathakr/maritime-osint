@@ -25,10 +25,7 @@ _POOL = None                # ThreadedConnectionPool (postgres only)
 def _init_backend() -> None:
     global _DB_URL, _BACKEND
     _DB_URL = os.getenv("DATABASE_URL", "")
-    if _DB_URL.startswith(("postgresql://", "postgres://")):
-        _BACKEND = "postgres"
-    else:
-        _BACKEND = "sqlite"
+    _BACKEND = "postgres" if _DB_URL.startswith(("postgresql://", "postgres://")) else "sqlite"
 
 
 _init_backend()
@@ -1533,7 +1530,7 @@ def find_ais_gaps(mmsi: str | None = None, min_hours: float = 2.0,
         ORDER BY gap_start DESC
         LIMIT {p}
     """
-    params = mmsi_params + [min_hours, limit]
+    params = [*mmsi_params, min_hours, limit]
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(query, params)

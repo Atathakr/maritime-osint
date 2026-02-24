@@ -10,7 +10,7 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
-from typing import Generator
+from collections.abc import Generator
 
 import requests
 
@@ -85,9 +85,11 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
         prog_el = _t(sdn_entry, "programList")
         programs: list[str] = []
         if prog_el is not None:
-            for prog in prog_el.findall(f"{{{OFAC_NS}}}program"):
-                if prog.text:
-                    programs.append(prog.text.strip())
+            programs.extend(
+                prog.text.strip()
+                for prog in prog_el.findall(f"{{{OFAC_NS}}}program")
+                if prog.text
+            )
 
         # Aliases
         aka_el = _t(sdn_entry, "akaList")
@@ -159,7 +161,7 @@ def fetch_ofac_sdn(vessel_only: bool = True) -> list[dict]:
 
 # ── OpenSanctions ──────────────────────────────────────────────────────────
 
-def _iter_opensanctions_lines(url: str) -> Generator[dict, None, None]:
+def _iter_opensanctions_lines(url: str) -> Generator[dict]:
     """Stream FtM JSON Lines from OpenSanctions, yielding one dict per line."""
     with requests.get(url, stream=True, timeout=180) as resp:
         resp.raise_for_status()

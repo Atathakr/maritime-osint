@@ -113,10 +113,11 @@ def _deduplicate(events: list[dict]) -> list[dict]:
 
         duplicate = False
         for k in kept:
-            if tuple(sorted([k["mmsi1"], k["mmsi2"]])) == pair:
-                if abs(_ts_to_epoch(k["event_ts"]) - ev_ts) <= threshold:
-                    duplicate = True
-                    break
+            if tuple(sorted([k["mmsi1"], k["mmsi2"]])) == pair and abs(
+                _ts_to_epoch(k["event_ts"]) - ev_ts
+            ) <= threshold:
+                duplicate = True
+                break
         if not duplicate:
             kept.append(ev)
 
@@ -158,9 +159,13 @@ def run_detection(
         # Step 3 — at least one vessel slow
         sog1 = c.get("sog1")
         sog2 = c.get("sog2")
-        if sog1 is not None and sog2 is not None:
-            if sog1 > max_sog and sog2 > max_sog:
-                continue
+        if (
+            sog1 is not None
+            and sog2 is not None
+            and sog1 > max_sog
+            and sog2 > max_sog
+        ):
+            continue
 
         # Mid-point for zone lookup
         mid_lat = (lat1 + lat2) / 2.0

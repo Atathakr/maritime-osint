@@ -28,7 +28,7 @@ import io
 import logging
 import re
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -113,7 +113,7 @@ def fetch_and_ingest(year: int, month: int, zone: int,
                         ts_raw = row.get("BaseDateTime", "")
                         try:
                             ts = datetime.strptime(ts_raw, "%Y-%m-%dT%H:%M:%S").replace(
-                                tzinfo=timezone.utc
+                                tzinfo=UTC
                             )
                             position_ts = ts.isoformat()
                         except Exception:

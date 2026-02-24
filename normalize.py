@@ -200,7 +200,7 @@ def parse_source_tags(list_name: str, identifiers: dict | str | None) -> list[st
         if label not in tags:
             tags.append(label)
 
-    return tags if tags else ["OpenSanctions"]
+    return tags or ["OpenSanctions"]
 
 
 def make_canonical_id(

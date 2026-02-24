@@ -47,9 +47,12 @@ def login_required(f):
 @app.before_request
 def check_auth():
     open_paths = {"/login", "/static", "/health"}
-    if APP_PASSWORD and not session.get("authenticated"):
-        if not any(request.path.startswith(p) for p in open_paths):
-            return redirect(url_for("login"))
+    if (
+        APP_PASSWORD
+        and not session.get("authenticated")
+        and not any(request.path.startswith(p) for p in open_paths)
+    ):
+        return redirect(url_for("login"))
 
 
 @app.get("/login")

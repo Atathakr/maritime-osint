@@ -23,17 +23,39 @@ line-length = 100
 
 [tool.ruff.lint]
 # Rules to enable
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "C90", # mccabe complexity
-    "B",   # flake8-bugbear
-]
+select = ["ALL"]
 
 # Rules to ignore
-ignore = []
+ignore = [
+    "D",      # Missing docstrings
+    "ANN",    # Missing type annotations
+    "T201",   # Print statements
+    "COM812", # Missing trailing comma (conflicts with formatter)
+    "ISC001", # Single line implicit string concatenation (conflicts with formatter)
+    "ERA001", # Commented out code
+    "FIX",    # TODOs
+    "TD",     # TODOs
+    "SLF001", # Private member access
+    "PLR2004",# Magic values
+    "FBT",    # Boolean positional arguments
+    "S608",   # Possible SQL injection (using string formatting for backend-agnostic SQL)
+    "BLE001", # Catching blind Exception
+    "S110",   # try-except-pass
+    "S112",   # try-except-continue
+    "ARG",    # Unused arguments
+    "N806",   # Variable name case
+    "SIM105", # Use contextlib.suppress
+    "RUF002", # Ambiguous characters in docstrings
+    "RUF003", # Ambiguous characters in comments
+    "PTH",    # Use Pathlib (nice to have, but not a priority)
+    "PLR",    # Refactoring rules (too subjective for initial lint)
+    "PLW",    # Pylint warnings (too many globals/overwrites)
+    "PLC0415",# Inline imports (used for lazy-loading in this project)
+    "S314",   # xml vulnerability (using standard library xml)
+    "RET503", # Missing explicit return (common in before_request)
+    "S104",   # Binding to all interfaces (common in dev apps)
+    "TRY400", # Use logging.exception (nice to have, but logging.error is fine)
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 20

@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ async def _listen_loop(api_key: str) -> None:
                 close_timeout=10,
             ) as ws:
                 _stats["connected"]       = True
-                _stats["connected_since"] = datetime.now(timezone.utc).isoformat()
+                _stats["connected_since"] = datetime.now(UTC).isoformat()
                 logger.info("AIS WebSocket connected to aisstream.io")
 
                 await ws.send(json.dumps(subscribe_msg))
@@ -144,7 +144,7 @@ async def _listen_loop(api_key: str) -> None:
 
 def _handle_message(msg: dict) -> None:
     _stats["messages_received"] += 1
-    _stats["last_message_at"]    = datetime.now(timezone.utc).isoformat()
+    _stats["last_message_at"]    = datetime.now(UTC).isoformat()
 
     msg_type = msg.get("MessageType")
     if msg_type == "PositionReport":
@@ -182,9 +182,9 @@ def _parse_position(msg: dict) -> dict | None:
 
     ts_raw = meta.get("time_utc", "")
     try:
-        ts = datetime.strptime(ts_raw[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        ts = datetime.strptime(ts_raw[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
     except Exception:
-        ts = datetime.now(timezone.utc)
+        ts = datetime.now(UTC)
 
     return {
         "mmsi":        mmsi,
@@ -220,7 +220,7 @@ def _handle_static(msg: dict) -> None:
         import db
         db.upsert_ais_vessel(mmsi, {
             "imo_number":  imo,
-            "vessel_name": ((static.get("Name") or meta.get("ShipName") or "")).strip() or None,
+            "vessel_name": (static.get("Name") or meta.get("ShipName") or "").strip() or None,
             "vessel_type": static.get("Type"),
             "call_sign":   (static.get("CallSign") or "").strip() or None,
             "length":      length,
