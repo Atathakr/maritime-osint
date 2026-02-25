@@ -127,6 +127,30 @@ class StsEvent(BaseModel):
         return ts.isoformat()
 
 
+class SpoofEvent(BaseModel):
+    """Normalized spoofing event (TELEPORT, OVERLAND, etc)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    mmsi: str = Field(..., pattern=r"^\d{9}$")
+    imo_number: str | None = Field(None, pattern=r"^\d{7}$")
+    vessel_name: str | None = None
+    spoof_type: str  # TELEPORT | OVERLAND | ID_MISMATCH
+    detected_at: datetime | str
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    detail: dict = Field(default_factory=dict)
+    risk_level: str = "LOW"
+    sanctions_hit: bool = False
+    risk_zone: str | None = None
+    indicator_code: str = "IND_SPOOF"
+
+    @field_serializer("detected_at")
+    def serialize_detected_at(self, ts: datetime | str, _info: FieldSerializationInfo) -> str:
+        if isinstance(ts, datetime):
+            return ts.isoformat()
+        return ts
+
+
 # ── API Request Schemas ───────────────────────────────────────────────────
 
 class ScreeningRequest(BaseModel):
@@ -145,6 +169,12 @@ class StsDetectRequest(BaseModel):
     hours_back: int = Field(48, gt=0, le=168)
     max_distance_km: float = Field(0.926, gt=0)
     max_sog: float = Field(3.0, gt=0)
+
+
+class SpoofDetectRequest(BaseModel):
+    """Spoof detection parameters."""
+    mmsi: str | None = Field(None, pattern=r"^\d{9}$")
+    hours_back: int = Field(48, gt=0, le=720)
 
 
 # ── API Response / Result Schemas ─────────────────────────────────────────

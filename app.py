@@ -18,6 +18,7 @@ import sts_detection
 import reconcile
 import map_data
 import schemas
+import spoof_detector
 
 from pydantic import ValidationError
 
@@ -418,6 +419,48 @@ def api_sts_events():
     return jsonify(rows)
 
 
+# ── Spoof Detection ───────────────────────────────────────────────────────
+
+@app.post("/api/spoof/run")
+@login_required
+def api_spoof_run():
+    """
+    Run spoofing detection (teleportation, etc).
+    Body: {"mmsi": "123456789", "hours_back": 48}
+    """
+    try:
+        data = schemas.SpoofDetectRequest.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
+
+    events = spoof_detector.run_detection(
+        mmsi=data.mmsi,
+        hours_back=data.hours_back
+    )
+    return jsonify({
+        "status": "success",
+        "mmsi": data.mmsi,
+        "hours_back": data.hours_back,
+        "events_found": len(events)
+    })
+
+
+@app.get("/api/spoof/events")
+@login_required
+def api_spoof_events():
+    """
+    List detected spoofing events.
+    Query params: mmsi, risk_level, limit, offset
+    """
+    rows = db.get_spoof_events(
+        mmsi=request.args.get("mmsi") or None,
+        risk_level=request.args.get("risk_level") or None,
+        limit=min(int(request.args.get("limit", 200)), 1000),
+        offset=int(request.args.get("offset", 0)),
+    )
+    return jsonify(rows)
+
+
 # ── Map ───────────────────────────────────────────────────────────────────
 
 @app.get("/api/map/vessels")
@@ -437,6 +480,7 @@ def api_map_vessels():
         hours       = int(request.args.get("hours",       720))
         dp_days     = int(request.args.get("dp_days",      30))
         sts_days    = int(request.args.get("sts_days",     30))
+        spoof_days  = int(request.args.get("spoof_days",   30))
         risk_filter = request.args.get("risk_filter", "medium_plus")
     except (TypeError, ValueError) as exc:
         return jsonify({"error": f"Invalid parameters: {exc}"}), 400
@@ -445,6 +489,7 @@ def api_map_vessels():
         hours=hours,
         dp_days=dp_days,
         sts_days=sts_days,
+        spoof_days=spoof_days,
         risk_filter=risk_filter,
     )
     return jsonify({"vessels": vessels, "count": len(vessels)})

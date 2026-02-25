@@ -431,6 +431,30 @@ def _init_postgres(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
 
+    # ── Session 5: Spoofing events ────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS spoof_events (
+            id              SERIAL PRIMARY KEY,
+            mmsi            VARCHAR(20) NOT NULL,
+            imo_number      VARCHAR(20),
+            vessel_name     VARCHAR(255),
+            spoof_type      VARCHAR(50) NOT NULL, -- TELEPORT | OVERLAND | ID_MISMATCH
+            detected_at     TIMESTAMPTZ NOT NULL,
+            lat             DOUBLE PRECISION NOT NULL,
+            lon             DOUBLE PRECISION NOT NULL,
+            detail          JSONB DEFAULT '{}',
+            risk_level      VARCHAR(20) DEFAULT 'LOW',
+            sanctions_hit   BOOLEAN DEFAULT FALSE,
+            risk_zone       VARCHAR(100),
+            indicator_code  VARCHAR(20) DEFAULT 'IND_SPOOF',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, spoof_type, detected_at)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_mmsi ON spoof_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_ts   ON spoof_events(detected_at DESC)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -687,6 +711,122 @@ def _init_sqlite(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi2 ON sts_events(mmsi2)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
+
+    # ── Session 5: Spoofing events ────────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS spoof_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi           TEXT NOT NULL,
+            imo_number     TEXT,
+            vessel_name    TEXT,
+            spoof_type     TEXT NOT NULL,
+            detected_at    TEXT NOT NULL,
+            lat            REAL NOT NULL,
+            lon            REAL NOT NULL,
+            detail         TEXT DEFAULT '{}',
+            risk_level     TEXT DEFAULT 'LOW',
+            sanctions_hit  INTEGER DEFAULT 0,
+            risk_zone      TEXT,
+            indicator_code TEXT DEFAULT 'IND_SPOOF',
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, spoof_type, detected_at)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_mmsi ON spoof_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_spoof_ts   ON spoof_events(detected_at DESC)")
+
+
+# ── Identity Mismatch detection ───────────────────────────────────────────
+
+def find_imo_conflicts(days: int = 30) -> list[dict]:
+    """
+    Find different MMSIs claiming the same IMO number.
+    Returns list of conflicts with last known position and involved MMSIs.
+    """
+    cutoff_expr = (
+        f"datetime('now', '-{days} days')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{days} days'"
+    )
+
+    # Subquery to get unique (imo, mmsi) pairs first
+    subquery = f"""
+        SELECT imo_number, mmsi,
+               MAX(position_ts) as last_seen,
+               MAX(lat) as lat,
+               MAX(lon) as lon,
+               MAX(vessel_name) as vessel_name
+        FROM ais_positions
+        WHERE imo_number IS NOT NULL AND imo_number != ''
+          AND position_ts >= {cutoff_expr}
+        GROUP BY imo_number, mmsi
+    """
+
+    agg_func = "GROUP_CONCAT(mmsi)" if _BACKEND == "sqlite" else "STRING_AGG(mmsi, ', ')"
+
+    query = f"""
+        SELECT
+            imo_number,
+            {agg_func} as mmsis,
+            COUNT(*) as mmsi_count,
+            MAX(last_seen) as last_seen,
+            MAX(lat) as lat,
+            MAX(lon) as lon,
+            MAX(vessel_name) as vessel_name
+        FROM ({subquery}) AS sub
+        GROUP BY imo_number
+        HAVING COUNT(*) > 1
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query)
+        return _rows(c)
+
+
+def find_identity_flips(days: int = 30) -> list[dict]:
+    """
+    Find a single MMSI broadcasting different IMO numbers.
+    Returns list of flips with last known position and involved IMOs.
+    """
+    cutoff_expr = (
+        f"datetime('now', '-{days} days')"
+        if _BACKEND == "sqlite"
+        else f"NOW() - INTERVAL '{days} days'"
+    )
+
+    # Subquery to get unique (mmsi, imo) pairs first
+    subquery = f"""
+        SELECT mmsi, imo_number,
+               MAX(position_ts) as last_seen,
+               MAX(lat) as lat,
+               MAX(lon) as lon,
+               MAX(vessel_name) as vessel_name
+        FROM ais_positions
+        WHERE imo_number IS NOT NULL AND imo_number != ''
+          AND position_ts >= {cutoff_expr}
+        GROUP BY mmsi, imo_number
+    """
+
+    agg_func = "GROUP_CONCAT(imo_number)" if _BACKEND == "sqlite" else "STRING_AGG(imo_number, ', ')"
+
+    query = f"""
+        SELECT
+            mmsi,
+            {agg_func} as imos,
+            COUNT(*) as imo_count,
+            MAX(last_seen) as last_seen,
+            MAX(lat) as lat,
+            MAX(lon) as lon,
+            MAX(vessel_name) as vessel_name
+        FROM ({subquery}) AS sub
+        GROUP BY mmsi
+        HAVING COUNT(*) > 1
+    """
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query)
+        return _rows(c)
 
 
 # ── Canonical vessel registry ─────────────────────────────────────────────
@@ -1438,8 +1578,10 @@ def get_stats() -> dict:
             total_dark_periods = _row(c)["n"]
             c.execute("SELECT COUNT(*) AS n FROM sts_events")
             total_sts_events = _row(c)["n"]
+            c.execute("SELECT COUNT(*) AS n FROM spoof_events")
+            total_spoof_events = _row(c)["n"]
         except Exception:
-            total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = 0
+            total_ais_positions = total_ais_vessels = total_dark_periods = total_sts_events = total_spoof_events = 0
 
     return {
         "total_sanctions":     total_sanctions,
@@ -1450,6 +1592,7 @@ def get_stats() -> dict:
         "total_ais_vessels":   total_ais_vessels,
         "total_dark_periods":  total_dark_periods,
         "total_sts_events":    total_sts_events,
+        "total_spoof_events":   total_spoof_events,
     }
 
 
@@ -1838,6 +1981,50 @@ def get_active_mmsis(days: int = 30) -> list[str]:
         return [row[0] for row in c.fetchall()]
 
 
+def find_teleport_candidates(
+    hours_back: int = 48,
+    mmsi: str | None = None,
+    limit: int = 5000
+) -> list[dict]:
+    """
+    Find consecutive AIS positions for vessels within the last N hours.
+    Used for teleportation detection (speed violations).
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    if _BACKEND == "sqlite":
+        cutoff = f"datetime('now', '-{hours_back} hours')"
+    else:
+        cutoff = f"NOW() - INTERVAL '{hours_back} hours'"
+
+    mmsi_filter = f"AND mmsi = {p}" if mmsi else ""
+    mmsi_params = [mmsi] if mmsi else []
+
+    query = f"""
+        WITH ordered AS (
+            SELECT mmsi, imo_number, vessel_name,
+                   lat, lon, position_ts, sog,
+                   LEAD(position_ts) OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_ts,
+                   LEAD(lat)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lat,
+                   LEAD(lon)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lon,
+                   LEAD(sog)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_sog
+            FROM ais_positions
+            WHERE position_ts >= {cutoff}
+            {mmsi_filter}
+        )
+        SELECT *
+        FROM ordered
+        WHERE next_ts IS NOT NULL
+        ORDER BY position_ts DESC
+        LIMIT {p}
+    """
+    params = [*mmsi_params, limit]
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query, params)
+        return _rows(c)
+
+
 # ── STS event detection ───────────────────────────────────────────────────
 
 def find_sts_candidates(
@@ -1993,12 +2180,106 @@ def get_sts_events(
     return rows
 
 
+# ── Spoofing event detection ──────────────────────────────────────────────
+
+def upsert_spoof_events(events: list[dict]) -> int:
+    """Persist detected spoofing events. Returns count inserted/updated."""
+    if not events:
+        return 0
+    inserted = 0
+    with _conn() as conn:
+        c = conn.cursor()
+        for ev in events:
+            try:
+                detail_json = json.dumps(ev.get("detail", {}))
+                if _BACKEND == "postgres":
+                    c.execute(f"""
+                        INSERT INTO spoof_events (
+                            mmsi, imo_number, vessel_name, spoof_type,
+                            detected_at, lat, lon, detail,
+                            risk_level, sanctions_hit, risk_zone, indicator_code
+                        ) VALUES ({_ph(12)})
+                        ON CONFLICT (mmsi, spoof_type, detected_at) DO UPDATE SET
+                            lat           = EXCLUDED.lat,
+                            lon           = EXCLUDED.lon,
+                            detail        = EXCLUDED.detail,
+                            risk_level    = EXCLUDED.risk_level,
+                            sanctions_hit = EXCLUDED.sanctions_hit,
+                            risk_zone     = EXCLUDED.risk_zone
+                    """, (
+                        ev.get("mmsi"), ev.get("imo_number"), ev.get("vessel_name"),
+                        ev.get("spoof_type"), ev.get("detected_at"),
+                        ev.get("lat"), ev.get("lon"), detail_json,
+                        ev.get("risk_level", "LOW"),
+                        ev.get("sanctions_hit", False),
+                        ev.get("risk_zone"),
+                        ev.get("indicator_code", "IND_SPOOF"),
+                    ))
+                else:
+                    c.execute("""
+                        INSERT OR REPLACE INTO spoof_events (
+                            mmsi, imo_number, vessel_name, spoof_type,
+                            detected_at, lat, lon, detail,
+                            risk_level, sanctions_hit, risk_zone, indicator_code
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        ev.get("mmsi"), ev.get("imo_number"), ev.get("vessel_name"),
+                        ev.get("spoof_type"), ev.get("detected_at"),
+                        ev.get("lat"), ev.get("lon"), detail_json,
+                        ev.get("risk_level", "LOW"),
+                        1 if ev.get("sanctions_hit") else 0,
+                        ev.get("risk_zone"),
+                        ev.get("indicator_code", "IND_SPOOF"),
+                    ))
+                inserted += 1
+            except Exception:
+                pass
+    return inserted
+
+
+def get_spoof_events(limit: int = 200, offset: int = 0,
+                     mmsi: str | None = None,
+                     risk_level: str | None = None) -> list[dict]:
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    clauses: list[str] = []
+    params: list = []
+    if mmsi:
+        clauses.append(f"mmsi = {p}")
+        params.append(mmsi)
+    if risk_level:
+        clauses.append(f"risk_level = {p}")
+        params.append(risk_level)
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    params.extend([limit, offset])
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT id, mmsi, imo_number, vessel_name, spoof_type,
+                   detected_at, lat, lon, detail, risk_level,
+                   sanctions_hit, risk_zone, indicator_code, created_at
+            FROM spoof_events
+            {where}
+            ORDER BY detected_at DESC
+            LIMIT {p} OFFSET {p}
+        """, params)
+        rows = _rows(c)
+    for r in rows:
+        r["sanctions_hit"] = bool(r.get("sanctions_hit"))
+        if isinstance(r.get("detail"), str):
+            try:
+                r["detail"] = json.loads(r["detail"])
+            except json.JSONDecodeError:
+                r["detail"] = {}
+    return rows
+
+
 # ── Map data ───────────────────────────────────────────────────────────────
 
 def get_map_vessels_raw(
     hours: int = 48,
     dp_days: int = 7,
     sts_days: int = 7,
+    spoof_days: int = 7,
     limit: int = 1000,
 ) -> list[dict]:
     """
@@ -2018,10 +2299,12 @@ def get_map_vessels_raw(
         av_cutoff  = f"datetime('now', '-{hours} hours')"
         dp_cutoff  = f"datetime('now', '-{dp_days} days')"
         sts_cutoff = f"datetime('now', '-{sts_days} days')"
+        spoof_cutoff = f"datetime('now', '-{spoof_days} days')"
     else:
         av_cutoff  = f"NOW() - INTERVAL '{hours} hours'"
         dp_cutoff  = f"NOW() - INTERVAL '{dp_days} days'"
         sts_cutoff = f"NOW() - INTERVAL '{sts_days} days'"
+        spoof_cutoff = f"NOW() - INTERVAL '{spoof_days} days'"
 
     risk_case = """CASE risk_level
                        WHEN 'CRITICAL' THEN 4
@@ -2029,6 +2312,8 @@ def get_map_vessels_raw(
                        WHEN 'MEDIUM'   THEN 2
                        WHEN 'LOW'      THEN 1
                        ELSE 0 END"""
+
+    agg_func = "GROUP_CONCAT(DISTINCT spoof_type)" if _BACKEND == "sqlite" else "STRING_AGG(DISTINCT spoof_type, ', ')"
 
     query = f"""
         WITH
@@ -2051,6 +2336,15 @@ def get_map_vessels_raw(
         sts_agg AS (
             SELECT mmsi, MAX(rn) AS risk_num
             FROM   sts_side
+            GROUP  BY mmsi
+        ),
+        -- Pre-aggregate spoofing risk per MMSI
+        spoof_agg AS (
+            SELECT mmsi,
+                   MAX({risk_case}) AS risk_num,
+                   {agg_func} AS types
+            FROM   spoof_events
+            WHERE  detected_at >= {spoof_cutoff}
             GROUP  BY mmsi
         )
         SELECT
@@ -2085,10 +2379,13 @@ def get_map_vessels_raw(
                      AND vc2.imo_number = av.imo_number)
              LIMIT 1) AS source_tags,
             COALESCE(dp.risk_num,  0) AS dp_risk_num,
-            COALESCE(sts.risk_num, 0) AS sts_risk_num
+            COALESCE(sts.risk_num, 0) AS sts_risk_num,
+            COALESCE(spoof.risk_num, 0) AS spoof_risk_num,
+            spoof.types AS spoof_types
         FROM  ais_vessels av
         LEFT  JOIN dp_agg  dp  ON dp.mmsi  = av.mmsi
         LEFT  JOIN sts_agg sts ON sts.mmsi = av.mmsi
+        LEFT  JOIN spoof_agg spoof ON spoof.mmsi = av.mmsi
         WHERE av.last_lat  IS NOT NULL
           AND av.last_lon  IS NOT NULL
           AND av.last_seen >= {av_cutoff}
@@ -2101,7 +2398,7 @@ def get_map_vessels_raw(
                        AND av.imo_number != ''
                        AND vc2.imo_number = av.imo_number)
             ) THEN 1 ELSE 0 END DESC,
-            COALESCE(dp.risk_num, 0) + COALESCE(sts.risk_num, 0) DESC
+            COALESCE(dp.risk_num, 0) + COALESCE(sts.risk_num, 0) + COALESCE(spoof.risk_num, 0) DESC
         LIMIT {limit}
     """
 
@@ -2109,3 +2406,5 @@ def get_map_vessels_raw(
         c = _cursor(conn)
         c.execute(query)
         return _rows(c)
+
+

@@ -148,7 +148,7 @@
 
   // ── Fetch & render ───────────────────────────────────────────────────────
   async function fetchVessels() {
-    const url = `/api/map/vessels?hours=720&dp_days=30&sts_days=30&risk_filter=${_currentFilter}`;
+    const url = `/api/map/vessels?hours=720&dp_days=30&sts_days=30&spoof_days=30&risk_filter=${_currentFilter}`;
     try {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

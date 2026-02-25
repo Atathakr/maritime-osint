@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAisVessels();
   loadDarkPeriods();
   loadStsEvents();
+  loadSpoofEvents();
   // Defer map init so the rest of the page loads first
   setTimeout(initMap, 1500);
 
@@ -648,6 +649,72 @@ async function runStsDetect() {
       `${s.CRITICAL||0} CRITICAL · ${s.HIGH||0} HIGH · ${s.MEDIUM||0} MEDIUM · ${s.LOW||0} LOW` +
       `</span>`;
     await Promise.all([loadStsEvents(), loadStats()]);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Detection';
+  }
+}
+
+// ── Spoofing Alerts ────────────────────────────────────
+
+async function loadSpoofEvents() {
+  const riskFilter = document.getElementById('spoof-risk-filter')?.value || '';
+  const params = new URLSearchParams({ limit: 200 });
+  if (riskFilter) params.set('risk_level', riskFilter);
+
+  const tbody = document.getElementById('spoof-tbody');
+  try {
+    const rows = await apiFetch(`/api/spoof/events?${params}`);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No spoofing events detected yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const riskCls = {
+        CRITICAL: 'badge-red',
+        HIGH:     'badge-red',
+        MEDIUM:   'badge-orange',
+        LOW:      'badge-muted',
+      }[r.risk_level] || 'badge-muted';
+      const sanc = r.sanctions_hit ? '<span class="badge badge-red" title="Sanctions hit">⚑</span>' : '';
+      const ts   = r.detected_at ? new Date(r.detected_at).toLocaleString() : '—';
+      const detail = typeof r.detail === 'string' ? r.detail : JSON.stringify(r.detail || {});
+      return `<tr>
+        <td><span class="badge ${riskCls}">${escHtml(r.risk_level||'')}</span></td>
+        <td class="imo">${escHtml(r.mmsi)}</td>
+        <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
+        <td><span class="badge badge-muted">${escHtml(r.spoof_type)}</span></td>
+        <td class="log-time">${escHtml(ts)}</td>
+        <td style="font-size:.7rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title='${escAttr(detail)}'>${escHtml(detail)}</td>
+        <td>${sanc}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function runSpoofDetect() {
+  const hoursBack = parseInt(document.getElementById('spoof-hours-back').value || '48', 10);
+  const btn = document.getElementById('run-spoof-btn');
+  const statusEl = document.getElementById('spoof-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = '<span class="text-muted">Scanning AIS history for anomalies…</span>';
+
+  try {
+    const result = await apiFetch('/api/spoof/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hours_back: hoursBack }),
+    });
+    statusEl.innerHTML =
+      `<span class="text-success">✓ Detection complete — ` +
+      `${fmt(result.events_found||0)} events found</span>`;
+    await Promise.all([loadSpoofEvents(), loadStats()]);
   } catch (e) {
     statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
   } finally {
