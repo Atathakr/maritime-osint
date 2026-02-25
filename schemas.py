@@ -198,8 +198,44 @@ class ScreeningResult(BaseModel):
     error: str | None = None
 
 
+class IndicatorSummary(BaseModel):
+    """
+    AIS intelligence signal counts and latest-event metadata for one vessel.
+    Populated by db.get_vessel_indicator_summary(mmsi).
+    """
+    # Dark periods (IND1)
+    dp_count: int = 0
+    dp_last_ts: datetime | None = None
+    dp_last_hours: float | None = None
+    dp_last_lat: float | None = None
+    dp_last_lon: float | None = None
+    # STS events (IND7)
+    sts_count: int = 0
+    sts_last_ts: datetime | None = None
+    sts_last_lat: float | None = None
+    sts_last_lon: float | None = None
+    # AIS last-seen
+    ais_last_seen: datetime | None = None
+    ais_sog: float | None = None
+    ais_destination: str | None = None
+    ais_lat: float | None = None
+    ais_lon: float | None = None
+
+    @field_serializer(
+        "dp_last_ts", "sts_last_ts", "ais_last_seen", when_used="json"
+    )
+    def serialize_dt(self, dt: datetime | None, _info: FieldSerializationInfo) -> str | None:
+        return dt.isoformat() if dt else None
+
+
 class VesselDetail(BaseModel):
-    """Deep detail report for a specific vessel."""
+    """
+    Deep detail report for a specific vessel.
+
+    risk_score formula:
+      sanctioned → 100 (hard ceiling)
+      else       → min(min(dp_count×10, 40) + min(sts_count×15, 45), 99)
+    """
     imo_number: str
     vessel: dict | None = None
     sanctions_hits: list[ScreeningHit] = Field(default_factory=list)
@@ -208,3 +244,4 @@ class VesselDetail(BaseModel):
     risk_factors: list[str] = Field(default_factory=list)
     risk_score: int = 0
     sanctioned: bool = False
+    indicator_summary: IndicatorSummary | None = None

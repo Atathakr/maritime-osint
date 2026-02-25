@@ -130,12 +130,52 @@ async function runScreening() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
-    renderScreenResult(el, result);
+
+    // If we have sanctioned hits with IMOs, fetch the full detail profile(s)
+    const hitsWithImo = (result.hits || []).filter(h => h.imo_number);
+    if (result.sanctioned && hitsWithImo.length > 0) {
+      // Show a brief loading state while fetching details
+      el.innerHTML = `<div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
+        ⚠ SANCTIONS MATCH — ${result.total_hits} hit${result.total_hits !== 1 ? 's' : ''}
+        for <em>${escHtml(result.query)}</em>
+        <span class="text-muted" style="font-weight:400;">(by ${({ imo: 'IMO', mmsi: 'MMSI', name: 'name' }[result.query_type] || result.query_type)})</span>
+      </div>`;
+      // Fetch detail profiles in parallel for hits with IMOs
+      const detailPromises = hitsWithImo.map(h => fetchVesselDetail(h.imo_number));
+      const details = await Promise.all(detailPromises);
+      let profileHtml = '';
+      for (const detail of details) {
+        if (detail) profileHtml += renderVesselProfileHtml(detail);
+      }
+      // Append any hits without IMO as flat cards
+      const hitsWithoutImo = (result.hits || []).filter(h => !h.imo_number);
+      if (hitsWithoutImo.length) {
+        for (const hit of hitsWithoutImo) {
+          profileHtml += renderFlatHitCardHtml(hit);
+        }
+      }
+      el.innerHTML += profileHtml;
+    } else {
+      renderScreenResult(el, result);
+    }
   } catch (e) {
     el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">Error: ${escHtml(e.message)}</p>`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'SCREEN';
+  }
+}
+
+/**
+ * Fetch a full VesselDetail from GET /api/screen/<imo>.
+ * Returns the parsed JSON object or null on error.
+ */
+async function fetchVesselDetail(imo) {
+  try {
+    return await apiFetch(`/api/screen/${encodeURIComponent(imo)}`);
+  } catch (e) {
+    console.warn('fetchVesselDetail failed for IMO', imo, e);
+    return null;
   }
 }
 
@@ -201,6 +241,237 @@ function ownershipDetailsHtml(hit) {
   </details>`;
 }
 
+/**
+ * Render a flat hit card HTML string (fallback for hits without IMO).
+ * This is the original hit card style.
+ */
+function renderFlatHitCardHtml(hit) {
+  const aliases = Array.isArray(hit.aliases) && hit.aliases.length
+    ? `<div class="hit-meta">AKA: ${hit.aliases.slice(0, 5).map(escHtml).join(' · ')}</div>`
+    : '';
+  const imoStr  = hit.imo_number
+    ? `<span class="text-info">IMO ${hit.imo_number}</span> · ` : '';
+  const mmsiStr = hit.mmsi ? `MMSI ${hit.mmsi} · ` : '';
+  const flagStr = hit.flag_state ? `Flag: ${escHtml(hit.flag_state)} · ` : '';
+  const typeStr = hit.vessel_type || hit.entity_type || '';
+  const memberCount = Array.isArray(hit.memberships) ? hit.memberships.length : 0;
+  const memberNote  = memberCount > 1
+    ? `<span class="text-muted" style="font-size:.68rem;font-weight:400;">(${memberCount} list entries)</span>`
+    : '';
+  return `
+    <div class="hit-card">
+      <div style="display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;">
+        ${sourceTagBadges(hit.source_tags)}
+        <span class="hit-name">${escHtml(hit.entity_name)}</span>
+        ${memberNote}
+      </div>
+      <div class="hit-meta">${imoStr}${mmsiStr}${flagStr}${escHtml(typeStr)}</div>
+      ${hit.program ? `<div class="hit-meta text-accent">Program: ${escHtml(hit.program)}</div>` : ''}
+      ${aliases}
+      ${ownershipDetailsHtml(hit)}
+      <div class="confidence">${escHtml(hit.match_confidence || '')}</div>
+    </div>`;
+}
+
+/**
+ * Render a full 5-section vessel profile from a VesselDetail API response.
+ * Returns an HTML string.
+ *
+ * Sections: Header · Identity · Sanctions · Ownership Chain · Intelligence Signals
+ */
+function renderVesselProfileHtml(detail) {
+  if (!detail) return '';
+
+  // The primary hit (first sanctions_hit) carries most per-vessel data
+  const hit = (detail.sanctions_hits && detail.sanctions_hits.length > 0)
+    ? detail.sanctions_hits[0] : null;
+
+  const vessel = detail.vessel || {};
+
+  // ── Risk badge ──────────────────────────────────────────────────────────
+  const score = detail.risk_score || 0;
+  let riskLabel, riskClass;
+  if (score === 100) { riskLabel = 'CRITICAL'; riskClass = 'risk-badge-critical'; }
+  else if (score >= 70) { riskLabel = 'HIGH';     riskClass = 'risk-badge-high'; }
+  else if (score >= 40) { riskLabel = 'MEDIUM';   riskClass = 'risk-badge-medium'; }
+  else                  { riskLabel = 'LOW';       riskClass = 'risk-badge-low'; }
+
+  // ── Header fields ───────────────────────────────────────────────────────
+  const entityName  = (hit && hit.entity_name) || vessel.entity_name || detail.imo_number;
+  const vesselType  = (hit && hit.vessel_type) || vessel.vessel_type || '';
+  const flagState   = (hit && hit.flag_state)  || vessel.flag_normalized || '';
+  const imoDisplay  = detail.imo_number ? `IMO ${detail.imo_number}` : '';
+  const mmsiDisplay = (hit && hit.mmsi) ? `MMSI ${hit.mmsi}` : (vessel.mmsi ? `MMSI ${vessel.mmsi}` : '');
+  const flagDisplay = flagState ? `🏴 ${escHtml(flagState)}` : '';
+  const idMeta = [imoDisplay, mmsiDisplay, flagDisplay].filter(Boolean).join(' · ');
+
+  // ── Risk bar ────────────────────────────────────────────────────────────
+  const barHtml = `<div class="risk-bar">
+    <div class="risk-bar-fill risk-bar-fill-${riskClass}" style="width:${score}%"></div>
+  </div>
+  <span class="risk-bar-label">Risk score: ${score} / 100</span>`;
+
+  // ── Source tag badges ───────────────────────────────────────────────────
+  const sourceBadges = sourceTagBadges(detail.source_tags);
+
+  // ── IDENTITY section ────────────────────────────────────────────────────
+  const buildYear   = (hit && hit.build_year)    || null;
+  const callSign    = (hit && hit.call_sign)     || null;
+  const grossTon    = (hit && hit.gross_tonnage) || null;
+  const aliases     = (hit && Array.isArray(hit.aliases) && hit.aliases.length)
+    ? hit.aliases.slice(0, 8) : [];
+
+  const identityMeta = [];
+  if (buildYear)  identityMeta.push(`Built ${buildYear}`);
+  if (callSign)   identityMeta.push(`Call sign ${escHtml(callSign)}`);
+  if (grossTon)   identityMeta.push(`${grossTon.toLocaleString()} GT`);
+
+  const identityHtml = `<div class="profile-section">
+    <div class="profile-section-title">IDENTITY</div>
+    <div class="profile-section-body">
+      ${identityMeta.length ? `<div class="profile-row">${identityMeta.join(' · ')}</div>` : ''}
+      ${aliases.length ? `<div class="profile-row"><span class="profile-label">AKA</span> ${aliases.map(escHtml).join(' · ')}</div>` : ''}
+      ${!identityMeta.length && !aliases.length ? '<div class="profile-row text-muted">No identity data on record</div>' : ''}
+    </div>
+  </div>`;
+
+  // ── SANCTIONS section ────────────────────────────────────────────────────
+  const programs = [];
+  for (const h of (detail.sanctions_hits || [])) {
+    if (h.program) {
+      for (const p of h.program.split(',')) {
+        const pt = p.trim();
+        if (pt && !programs.includes(pt)) programs.push(pt);
+      }
+    }
+  }
+  const confidence = hit ? hit.match_confidence : '';
+  const listedOn   = detail.source_tags.join(' · ');
+  const memberNote = detail.total_memberships > 1
+    ? ` <span class="text-muted">(${detail.total_memberships} entries)</span>` : '';
+
+  const sanctionsHtml = `<div class="profile-section">
+    <div class="profile-section-title">SANCTIONS</div>
+    <div class="profile-section-body">
+      ${programs.length ? `<div class="profile-row"><span class="profile-label">Program</span> ${programs.slice(0,5).map(escHtml).join(' · ')}</div>` : ''}
+      <div class="profile-row"><span class="profile-label">Listed on</span> ${escHtml(listedOn)}${memberNote}</div>
+      ${confidence ? `<div class="profile-row"><span class="profile-label">Match</span> <span class="text-warn">${escHtml(confidence)}</span></div>` : ''}
+    </div>
+  </div>`;
+
+  // ── OWNERSHIP CHAIN section ─────────────────────────────────────────────
+  const ownership  = (hit && Array.isArray(hit.ownership))    ? hit.ownership    : [];
+  const flagHist   = (hit && Array.isArray(hit.flag_history)) ? hit.flag_history : [];
+  const roleOrder  = ['owner','operator','manager','past_owner','past_operator','past_manager'];
+  const roleColour = { owner:'#c0392b', operator:'#e67e22', manager:'#2980b9',
+                       past_owner:'#888', past_operator:'#888', past_manager:'#888' };
+
+  let ownershipBodyHtml = '';
+  if (ownership.length) {
+    const grouped = {};
+    for (const e of ownership) {
+      (grouped[e.role] = grouped[e.role] || []).push(e.entity_name);
+    }
+    const roles = [...roleOrder, ...Object.keys(grouped).filter(r => !roleOrder.includes(r))];
+    for (const role of roles) {
+      if (!grouped[role]) continue;
+      const colour = roleColour[role] || '#888';
+      const label  = role.replace(/_/g, ' ');
+      ownershipBodyHtml += `<div class="profile-ownership-row">
+        <span class="profile-ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        <span class="profile-ownership-names">
+          ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
+        </span>
+      </div>`;
+    }
+  }
+  // Flag chain timeline
+  if (flagHist.length) {
+    const flags = [...new Set(flagHist.map(f => f.flag_state).filter(Boolean))];
+    if (flags.length) {
+      ownershipBodyHtml += `<div class="profile-ownership-row">
+        <span class="profile-ownership-role" style="color:var(--muted)">past flags</span>
+        <span class="flag-chain">${flags.map(escHtml).join('<span class="flag-chain-arrow">→</span>')}</span>
+      </div>`;
+    }
+  }
+  if (!ownershipBodyHtml) {
+    ownershipBodyHtml = '<div class="profile-row text-muted">No ownership data on record</div>';
+  }
+
+  const ownershipHtml = `<div class="profile-section">
+    <div class="profile-section-title">OWNERSHIP CHAIN</div>
+    <div class="profile-section-body">${ownershipBodyHtml}</div>
+  </div>`;
+
+  // ── INTELLIGENCE SIGNALS section ─────────────────────────────────────────
+  const sig = detail.indicator_summary;
+  let signalsBodyHtml = '';
+
+  if (!sig || (!sig.dp_count && !sig.sts_count && !sig.ais_last_seen)) {
+    signalsBodyHtml = '<div class="signal-row text-muted">No AIS history on record for this vessel</div>';
+  } else {
+    // Dark periods
+    if (sig.dp_count > 0) {
+      let dpDetail = `${sig.dp_count} dark period${sig.dp_count !== 1 ? 's' : ''} (IND1)`;
+      if (sig.dp_last_hours != null) dpDetail += `   last: ${sig.dp_last_hours.toFixed(0)}h gap`;
+      if (sig.dp_last_lat != null && sig.dp_last_lon != null) {
+        dpDetail += ` · ${sig.dp_last_lat.toFixed(1)}°${sig.dp_last_lat >= 0 ? 'N' : 'S'} `
+          + `${Math.abs(sig.dp_last_lon).toFixed(1)}°${sig.dp_last_lon >= 0 ? 'E' : 'W'}`;
+      }
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(dpDetail)}</div>`;
+    }
+    // STS events
+    if (sig.sts_count > 0) {
+      let stsDetail = `${sig.sts_count} STS event${sig.sts_count !== 1 ? 's' : ''} (IND7)`;
+      if (sig.sts_last_ts) {
+        const d = new Date(sig.sts_last_ts);
+        stsDetail += `   last: ${d.toISOString().slice(0, 10)}`;
+      }
+      if (sig.sts_last_lat != null && sig.sts_last_lon != null) {
+        stsDetail += ` · ${sig.sts_last_lat.toFixed(1)}°${sig.sts_last_lat >= 0 ? 'N' : 'S'} `
+          + `${Math.abs(sig.sts_last_lon).toFixed(1)}°${sig.sts_last_lon >= 0 ? 'E' : 'W'}`;
+      }
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(stsDetail)}</div>`;
+    }
+    // AIS last-seen
+    if (sig.ais_last_seen) {
+      const ts  = new Date(sig.ais_last_seen).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+      const sog = sig.ais_sog != null ? ` · SOG ${sig.ais_sog.toFixed(1)}kt` : '';
+      signalsBodyHtml += `<div class="signal-row signal-ok">◉ AIS last seen  ${escHtml(ts)}${sog}</div>`;
+      if (sig.ais_destination) {
+        signalsBodyHtml += `<div class="signal-row signal-indent">Destination:  ${escHtml(sig.ais_destination)}</div>`;
+      }
+    } else if (!sig.dp_count && !sig.sts_count) {
+      signalsBodyHtml = '<div class="signal-row text-muted">No AIS history on record for this vessel</div>';
+    }
+  }
+
+  const signalsHtml = `<div class="profile-section">
+    <div class="profile-section-title">INTELLIGENCE SIGNALS</div>
+    <div class="profile-section-body">${signalsBodyHtml}</div>
+  </div>`;
+
+  // ── Assemble full profile ────────────────────────────────────────────────
+  return `<div class="vessel-profile">
+    <div class="vessel-profile-header">
+      <div class="vessel-profile-header-top">
+        <div class="vessel-profile-badges">${sourceBadges}</div>
+        <span class="risk-badge ${riskClass}">● ${riskLabel}</span>
+      </div>
+      <div class="vessel-profile-name">${escHtml(entityName)}
+        ${vesselType ? `<span class="vessel-profile-type">${escHtml(vesselType)}</span>` : ''}
+      </div>
+      <div class="vessel-profile-ids">${idMeta}</div>
+      <div class="vessel-profile-risk-row">${barHtml}</div>
+    </div>
+    ${identityHtml}
+    ${sanctionsHtml}
+    ${ownershipHtml}
+    ${signalsHtml}
+  </div>`;
+}
+
 function renderScreenResult(el, result) {
   if (result.error) {
     el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">${escHtml(result.error)}</p>`;
@@ -231,38 +502,7 @@ function renderScreenResult(el, result) {
     </div>`;
 
   for (const hit of result.hits) {
-    const aliases = Array.isArray(hit.aliases) && hit.aliases.length
-      ? `<div class="hit-meta">AKA: ${hit.aliases.slice(0, 5).map(escHtml).join(' · ')}</div>`
-      : '';
-    const imoStr  = hit.imo_number
-      ? `<span class="text-info">IMO ${hit.imo_number}</span> · ` : '';
-    const mmsiStr = hit.mmsi ? `MMSI ${hit.mmsi} · ` : '';
-    const flagStr = hit.flag_state ? `Flag: ${escHtml(hit.flag_state)} · ` : '';
-    const typeStr = hit.vessel_type || hit.entity_type || '';
-
-    // Show how many individual list entries this canonical record has
-    const memberCount = Array.isArray(hit.memberships) ? hit.memberships.length : 0;
-    const memberNote  = memberCount > 1
-      ? `<span class="text-muted" style="font-size:.68rem;font-weight:400;">
-           (${memberCount} list entries)
-         </span>`
-      : '';
-
-    html += `
-      <div class="hit-card">
-        <div style="display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;">
-          ${sourceTagBadges(hit.source_tags)}
-          <span class="hit-name">${escHtml(hit.entity_name)}</span>
-          ${memberNote}
-        </div>
-        <div class="hit-meta">
-          ${imoStr}${mmsiStr}${flagStr}${escHtml(typeStr)}
-        </div>
-        ${hit.program ? `<div class="hit-meta text-accent">Program: ${escHtml(hit.program)}</div>` : ''}
-        ${aliases}
-        ${ownershipDetailsHtml(hit)}
-        <div class="confidence">${escHtml(hit.match_confidence || '')}</div>
-      </div>`;
+    html += renderFlatHitCardHtml(hit);
   }
 
   el.innerHTML = html;
@@ -343,10 +583,34 @@ function renderSanctionsTable(rows) {
     </tr>`).join('');
 }
 
+/**
+ * Called when a row is clicked in the Sanctions Database table or any other
+ * table that provides an IMO or name.  If `query` looks like a 7-digit IMO,
+ * we skip the basic screen call and go straight to the detail endpoint so the
+ * full enriched profile renders immediately.
+ */
 function screenFromTable(query) {
   document.getElementById('screen-query').value = query;
-  document.getElementById('screen-query').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  runScreening();
+  const screenPanel = document.getElementById('screen-result');
+  screenPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // If it looks like an IMO number, fetch the full detail profile directly
+  const cleanDigits = (query || '').replace(/\D/g, '');
+  if (cleanDigits.length === 7) {
+    const el = document.getElementById('screen-result');
+    el.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Loading vessel profile…</span>';
+    fetchVesselDetail(cleanDigits).then(detail => {
+      if (detail) {
+        el.innerHTML = `<div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
+          ⚠ SANCTIONS PROFILE — IMO ${escHtml(cleanDigits)}
+        </div>` + renderVesselProfileHtml(detail);
+      } else {
+        runScreening();
+      }
+    });
+  } else {
+    runScreening();
+  }
 }
 
 // ── Ingestion ─────────────────────────────────────────

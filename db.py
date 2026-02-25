@@ -1165,6 +1165,90 @@ def get_vessel_flag_history(imo_number: str) -> list[dict]:
         return _rows(c)
 
 
+def get_vessel_indicator_summary(mmsi: str) -> dict:
+    """
+    Return dark period count + latest event, STS count + latest event,
+    and AIS last-seen data for a given MMSI.
+
+    Returns a dict with keys:
+      dp_count, dp_last_ts, dp_last_hours, dp_last_lat, dp_last_lon,
+      sts_count, sts_last_ts, sts_last_lat, sts_last_lon,
+      ais_last_seen, ais_sog, ais_destination, ais_lat, ais_lon
+    All optional fields default to None if no data exists.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    result: dict = {
+        "dp_count": 0, "dp_last_ts": None, "dp_last_hours": None,
+        "dp_last_lat": None, "dp_last_lon": None,
+        "sts_count": 0, "sts_last_ts": None,
+        "sts_last_lat": None, "sts_last_lon": None,
+        "ais_last_seen": None, "ais_sog": None,
+        "ais_destination": None, "ais_lat": None, "ais_lon": None,
+    }
+
+    with _conn() as conn:
+        c = _cursor(conn)
+
+        # ── Dark periods ──────────────────────────────────────────────────
+        c.execute(f"SELECT COUNT(*) AS n FROM dark_periods WHERE mmsi = {p}", (mmsi,))
+        row = _row(c)
+        result["dp_count"] = (row["n"] if row else 0) or 0
+
+        if result["dp_count"] > 0:
+            c.execute(f"""
+                SELECT gap_start, gap_hours, last_lat, last_lon
+                FROM dark_periods
+                WHERE mmsi = {p}
+                ORDER BY gap_start DESC
+                LIMIT 1
+            """, (mmsi,))
+            row = _row(c)
+            if row:
+                result["dp_last_ts"]    = row.get("gap_start")
+                result["dp_last_hours"] = row.get("gap_hours")
+                result["dp_last_lat"]   = row.get("last_lat")
+                result["dp_last_lon"]   = row.get("last_lon")
+
+        # ── STS events ────────────────────────────────────────────────────
+        c.execute(f"""
+            SELECT COUNT(*) AS n FROM sts_events
+            WHERE mmsi1 = {p} OR mmsi2 = {p}
+        """, (mmsi, mmsi))
+        row = _row(c)
+        result["sts_count"] = (row["n"] if row else 0) or 0
+
+        if result["sts_count"] > 0:
+            c.execute(f"""
+                SELECT event_ts, lat, lon
+                FROM sts_events
+                WHERE mmsi1 = {p} OR mmsi2 = {p}
+                ORDER BY event_ts DESC
+                LIMIT 1
+            """, (mmsi, mmsi))
+            row = _row(c)
+            if row:
+                result["sts_last_ts"]  = row.get("event_ts")
+                result["sts_last_lat"] = row.get("lat")
+                result["sts_last_lon"] = row.get("lon")
+
+        # ── AIS vessel last-seen ──────────────────────────────────────────
+        c.execute(f"""
+            SELECT last_seen, last_sog, destination, last_lat, last_lon
+            FROM ais_vessels
+            WHERE mmsi = {p}
+        """, (mmsi,))
+        row = _row(c)
+        if row:
+            result["ais_last_seen"]    = row.get("last_seen")
+            result["ais_sog"]          = row.get("last_sog")
+            result["ais_destination"]  = row.get("destination")
+            result["ais_lat"]          = row.get("last_lat")
+            result["ais_lon"]          = row.get("last_lon")
+
+    return result
+
+
 # ── Reconciliation helpers ────────────────────────────────────────────────
 
 def find_mmsi_imo_collisions() -> list[tuple[str, str]]:

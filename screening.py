@@ -123,7 +123,12 @@ def screen(query: str) -> schemas.ScreeningResult:
 def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     """
     Full screening report for a known vessel (by IMO).
-    Fetches the canonical vessel record plus all sanctions list memberships.
+    Fetches the canonical vessel record, all sanctions list memberships,
+    and AIS intelligence signals (dark periods, STS events, last position).
+
+    Risk score formula:
+      sanctioned → 100 (hard ceiling)
+      else       → min(min(dp_count×10, 40) + min(sts_count×15, 45), 99)
 
     Returns a VesselDetail model.
     """
@@ -134,6 +139,11 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     processed_hits = []
     for hit in sanctions_hits:
         _annotate_hit(hit, "imo")
+        canonical_id = hit.get("canonical_id")
+        imo_num = hit.get("imo_number")
+        if canonical_id:
+            hit["ownership"]    = db.get_vessel_ownership(canonical_id)
+            hit["flag_history"] = db.get_vessel_flag_history(imo_num) if imo_num else []
         try:
             processed_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:
@@ -152,8 +162,29 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if all_tags:
         risk_factors.append(f"Listed on: {', '.join(sorted(all_tags))}")
 
-    # Risk score calculation
-    risk_score = min(total_memberships * 25, 100)
+    # ── Indicator summary (dark periods + STS + AIS last-seen) ────────────
+    # Prefer MMSI from vessel record; fall back to first sanctions hit
+    mmsi: str | None = None
+    if vessel and vessel.get("mmsi"):
+        mmsi = vessel["mmsi"]
+    elif processed_hits and processed_hits[0].mmsi:
+        mmsi = processed_hits[0].mmsi
+
+    indicator_summary: schemas.IndicatorSummary | None = None
+    if mmsi:
+        try:
+            raw = db.get_vessel_indicator_summary(mmsi)
+            indicator_summary = schemas.IndicatorSummary.model_validate(raw)
+        except Exception:
+            pass
+
+    # ── Composite risk score ──────────────────────────────────────────────
+    if processed_hits:
+        risk_score = 100
+    else:
+        dp  = indicator_summary.dp_count  if indicator_summary else 0
+        sts = indicator_summary.sts_count if indicator_summary else 0
+        risk_score = min(min(dp * 10, 40) + min(sts * 15, 45), 99)
 
     return schemas.VesselDetail(
         imo_number=imo_clean,
@@ -164,4 +195,5 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         risk_factors=risk_factors,
         risk_score=risk_score,
         sanctioned=len(processed_hits) > 0,
+        indicator_summary=indicator_summary,
     )

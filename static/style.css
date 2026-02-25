@@ -477,6 +477,181 @@ td.flag  { font-size: 0.75rem; }
 .map-popup-risks li { color: var(--warn); }
 .map-popup-risks li::before { content: "⚑ "; }
 
+/* ── Vessel Profile (enriched screening result) ─────────────────────── */
+
+.vessel-profile {
+  background: var(--card-bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 5px;
+  margin-top: .75rem;
+  overflow: hidden;
+}
+
+/* Header block */
+.vessel-profile-header {
+  padding: .85rem 1rem .7rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(239,68,68,.04);
+}
+.vessel-profile-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: .5rem;
+  margin-bottom: .4rem;
+}
+.vessel-profile-badges { display: flex; flex-wrap: wrap; gap: .25rem; }
+.vessel-profile-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--danger);
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+.vessel-profile-type {
+  font-size: .72rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.vessel-profile-ids {
+  font-size: .74rem;
+  color: var(--muted);
+  margin-top: .2rem;
+}
+.vessel-profile-risk-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-top: .5rem;
+}
+
+/* Risk badge */
+.risk-badge {
+  font-size: .65rem;
+  font-weight: 700;
+  padding: .18rem .5rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.risk-badge-critical { background: rgba(239,68,68,.18);  color: #ef4444; }
+.risk-badge-high     { background: rgba(249,115,22,.18); color: #f97316; }
+.risk-badge-medium   { background: rgba(234,179,8,.18);  color: #eab308; }
+.risk-badge-low      { background: rgba(34,197,94,.18);  color: #22c55e; }
+
+/* Risk bar */
+.risk-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,.06);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .3s ease;
+}
+.risk-bar-fill-risk-badge-critical { background: var(--danger); }
+.risk-bar-fill-risk-badge-high     { background: var(--accent); }
+.risk-bar-fill-risk-badge-medium   { background: var(--warn); }
+.risk-bar-fill-risk-badge-low      { background: var(--success); }
+.risk-bar-label {
+  font-size: .68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Profile sections */
+.profile-section {
+  border-bottom: 1px solid var(--border);
+}
+.profile-section:last-child { border-bottom: none; }
+.profile-section-title {
+  font-size: .64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted);
+  padding: .45rem 1rem .2rem;
+}
+.profile-section-body {
+  padding: 0 1rem .65rem;
+}
+.profile-row {
+  font-size: .74rem;
+  color: var(--text);
+  margin-bottom: .2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .3rem;
+}
+.profile-label {
+  color: var(--muted);
+  font-size: .68rem;
+  min-width: 5rem;
+  flex-shrink: 0;
+}
+
+/* Ownership rows within profile */
+.profile-ownership-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .3rem;
+  font-size: .72rem;
+  margin-bottom: .25rem;
+}
+.profile-ownership-role {
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 600;
+  min-width: 7rem;
+  flex-shrink: 0;
+}
+.profile-ownership-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .2rem;
+}
+
+/* Flag chain timeline */
+.flag-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .2rem;
+  font-size: .7rem;
+}
+.flag-chain .ownership-flag { font-size: .68rem; }
+.flag-chain-arrow {
+  color: var(--muted);
+  font-size: .7rem;
+  padding: 0 .1rem;
+}
+
+/* Intelligence Signals rows */
+.signal-row {
+  font-size: .73rem;
+  padding: .12rem 0;
+  font-family: var(--font);
+}
+.signal-warn   { color: var(--warn); }
+.signal-ok     { color: var(--success); }
+.signal-indent {
+  color: var(--muted);
+  padding-left: 1.1rem;
+  font-size: .7rem;
+}
+
 /* ── Ownership & History panel (screening hit cards) ─────────────────── */
 
 .ownership-details {
