@@ -48,36 +48,16 @@ def _detect_query_type(query: str) -> str:
 
 def _annotate_hit(hit: dict, query_type: str) -> None:
     """
-    Annotate a single hit dict in-place:
-      • match_confidence  — human-readable confidence label
-      • Deserialise JSON string fields (aliases, source_tags) if needed
-      • Guarantee source_tags is always a list (never None)
+    Annotate a single hit dict in-place with match_confidence.
+    JSON parsing and list initialisation are handled by ScreeningHit's
+    model_validator, so no pre-processing is needed here.
     """
-    # Confidence label
     if hit.get("imo_number") and query_type == "imo":
         hit["match_confidence"] = "HIGH — exact IMO match"
     elif hit.get("mmsi") and query_type == "mmsi":
         hit["match_confidence"] = "HIGH — exact MMSI match"
     else:
         hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
-
-    # Deserialise any JSON fields that may arrive as strings (SQLite path)
-    import json
-    for field in ("aliases", "source_tags"):
-        val = hit.get(field)
-        if isinstance(val, str):
-            try:
-                hit[field] = json.loads(val)
-            except Exception:
-                hit[field] = []
-
-    # Ensure source_tags is never None or missing — JS rendering depends on it
-    if not hit.get("source_tags"):
-        hit["source_tags"] = []
-
-    # Ensure memberships is always a list
-    if not isinstance(hit.get("memberships"), list):
-        hit["memberships"] = []
 
 
 def screen(query: str) -> schemas.ScreeningResult:
