@@ -10,10 +10,77 @@ Primary indicators:
 import logging
 import math
 import datetime
+import os
+import shapefile
+from shapely.geometry import shape, Point
+from shapely.strtree import STRtree
 import db
 import schemas
 
 logger = logging.getLogger(__name__)
+
+# ── Spatial Logic ──────────────────────────────────────────────────────────
+
+class LandGeometryLoader:
+    """
+    Singleton class for loading land geometries from a shapefile and building
+    a spatial index (STRtree) for optimized point-in-polygon queries.
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(LandGeometryLoader, cls).__new__(cls)
+            cls._instance._tree = None
+            cls._instance._geometries = []
+            cls._instance._load_data()
+        return cls._instance
+
+    def _load_data(self):
+        """Loads shapefile and builds spatial index."""
+        # Use absolute path to ensure data is found when run from different contexts
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        shp_path = os.path.join(base_dir, "data/shp/ne_10m_land/ne_10m_land.shp")
+        
+        if not os.path.exists(shp_path):
+            logger.warning("Shapefile not found at %s. Overland detection will be disabled.", shp_path)
+            return
+
+        try:
+            logger.info("Loading land geometries from %s...", shp_path)
+            # pyshp doesn't support reading from streams directly for .shx/.dbf,
+            # so we use the path. It expects the same-named .shx and .dbf files nearby.
+            with shapefile.Reader(shp_path) as sf:
+                self._geometries = [shape(s) for s in sf.shapes()]
+            
+            if self._geometries:
+                self._tree = STRtree(self._geometries)
+                logger.info("Loaded %d land geometries into spatial index.", len(self._geometries))
+        except Exception as e:
+            logger.error("Failed to load land geometries: %s", e)
+
+    def contains(self, lat: float, lon: float) -> bool:
+        """Checks if a latitude/longitude point is inside any land geometry."""
+        if self._tree is None:
+            return False
+        
+        point = Point(lon, lat)
+        # In Shapely 2.0+, STRtree.query(geometry, predicate='contains') returns indices
+        indices = self._tree.query(point, predicate="contains")
+        return len(indices) > 0
+
+def is_overland(lat: float, lon: float) -> bool:
+    """
+    Checks if a given coordinate is on land using Natural Earth data.
+    Gracefully handles missing data by returning False.
+    """
+    try:
+        if lat is None or lon is None:
+            return False
+        return LandGeometryLoader().contains(lat, lon)
+    except Exception as e:
+        logger.debug("Error in is_overland for lat=%s, lon=%s: %s", lat, lon, e)
+        return False
 
 # ── Thresholds ────────────────────────────────────────────────────────────
 
@@ -181,6 +248,43 @@ def run_detection(mmsi: str | None = None,
             spoof_events.append(event.model_dump())
         except Exception as e:
             logger.debug("Validation failed for ID_MISMATCH (IDENTITY_FLIP): %s", e)
+
+    # ── 3. Overland detection ──────────────────────────────────────────────
+    recent_positions = db.get_recent_positions(hours=hours_back, mmsi=mmsi, limit=10000)
+    for pos in recent_positions:
+        lat, lon = pos.get("lat"), pos.get("lon")
+        if is_overland(lat, lon):
+            mmsi_val = pos.get("mmsi")
+            imo_val  = pos.get("imo_number")
+
+            # Check for sanctions hits
+            sanctions_hits = []
+            if mmsi_val:
+                sanctions_hits += db.search_sanctions_by_mmsi(mmsi_val)
+            if imo_val and not sanctions_hits:
+                sanctions_hits += db.search_sanctions_by_imo(imo_val)
+
+            try:
+                event = schemas.SpoofEvent(
+                    mmsi=mmsi_val,
+                    imo_number=imo_val,
+                    vessel_name=pos.get("vessel_name"),
+                    spoof_type="OVERLAND",
+                    detected_at=pos.get("position_ts"),
+                    lat=lat,
+                    lon=lon,
+                    risk_level="CRITICAL",
+                    sanctions_hit=bool(sanctions_hits),
+                    detail={
+                        "lat": lat,
+                        "lon": lon,
+                        "context": "Point-in-polygon check against Natural Earth land data"
+                    },
+                    indicator_code="IND_SPOOF"
+                )
+                spoof_events.append(event.model_dump())
+            except Exception as e:
+                logger.debug("Validation failed for OVERLAND event MMSI %s: %s", mmsi_val, e)
 
     # Persist findings
     if spoof_events:

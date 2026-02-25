@@ -27,13 +27,11 @@
 
 ## Phase 3: Spatial Analysis (Overland)
 **Goal:** Implement overland detection requiring external dependencies.
+**Plans:** 2 plans
 
-- [ ] **P3-1: Dependency Setup**
-  - Add `shapely` and `pyshp` to `requirements.txt`.
-  - Sourcing/Downloading Natural Earth land shapefile.
-- [ ] **P3-2: Overland Logic**
-  - Implement `OVERLAND` detection logic in `spoof_detector.py`.
-  - Optimize spatial lookups.
-- [ ] **P3-3: Integration & Polish**
-  - Wire all signals into the primary `run_detection` entry point.
-  - Final risk scoring and sanctions cross-check refinement.
+- [x] phase-3-01-PLAN.md — Foundation & Spatial Logic
+- [x] phase-3-02-PLAN.md — Integration & Verification
+
+- [x] **P3-1: Dependency Setup**
+- [x] **P3-2: Overland Logic**
+- [x] **P3-3: Integration & Polish**
