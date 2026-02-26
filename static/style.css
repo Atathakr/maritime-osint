@@ -2,6 +2,7 @@
 
 :root {
   --bg:       #0a0e17;
+  --bg-darker: #05080c;
   --card-bg:  #0f1923;
   --card-bg2: #121e2b;
   --border:   #1e2d3d;
@@ -13,6 +14,19 @@
   --success:  #22c55e;      /* green — clear / safe */
   --warn:     #eab308;      /* yellow — partial / review */
   --font:     'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* Additional Palette */
+  --white:    #ffffff;
+  --black:    #000000;
+  --table-hover: #0f1d2a;
+  --ofac-red: #b91c1c;
+  --opensanctions-blue: #1d4ed8;
+  --muted-dark: #888888;
+
+  /* Ownership Roles */
+  --role-owner:    #c0392b;
+  --role-operator: #e67e22;
+  --role-manager:  #2980b9;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -81,7 +95,6 @@ a:hover { text-decoration: underline; }
 .stat-value.accent  { color: var(--accent); }
 .stat-value.info    { color: var(--info); }
 .stat-value.danger  { color: var(--danger); }
-.stat-value.success { color: var(--success); }
 
 /* ── Panels ─────────────────────────────────────────── */
 
@@ -144,11 +157,11 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.04em;
 }
 
-.btn-primary  { background: var(--accent); color: #000; }
+.btn-primary  { background: var(--accent); color: var(--black); }
 .btn-primary:hover { opacity: 0.88; }
 .btn-secondary { background: var(--card-bg2); color: var(--text); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--accent); }
-.btn-danger   { background: var(--danger); color: #fff; }
+.btn-danger   { background: var(--danger); color: var(--white); }
 .btn-sm       { padding: 0.35rem 0.7rem; font-size: 0.75rem; }
 
 /* ── Screen result ──────────────────────────────────── */
@@ -172,15 +185,15 @@ a:hover { text-decoration: underline; }
 .hit-card .hit-badge {
   display: inline-block;
   background: var(--danger);
-  color: #fff;
+  color: var(--white);
   font-size: 0.68rem;
   padding: 0.15rem 0.45rem;
   border-radius: 3px;
   margin-right: 0.3rem;
   vertical-align: middle;
 }
-.hit-card .hit-badge.list-ofac  { background: #b91c1c; }
-.hit-card .hit-badge.list-opensanctions { background: #1d4ed8; }
+.hit-card .hit-badge.list-ofac  { background: var(--ofac-red); }
+.hit-card .hit-badge.list-opensanctions { background: var(--opensanctions-blue); }
 .hit-card .confidence { font-size: 0.72rem; color: var(--warn); margin-top: 0.25rem; }
 
 /* ── Table ──────────────────────────────────────────── */
@@ -210,7 +223,7 @@ th {
   position: sticky; top: 48px;
 }
 
-tr:hover td { background: #0f1d2a; }
+tr:hover td { background: var(--table-hover); }
 
 td.imo   { color: var(--info); font-weight: 600; }
 td.name  { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
@@ -229,7 +242,7 @@ td.flag  { font-size: 0.75rem; }
 .badge-blue   { background: rgba(59,130,246,0.15);  color: var(--info); }
 .badge-orange { background: rgba(249,115,22,0.15);  color: var(--accent); }
 .badge-muted  { background: rgba(107,130,153,0.15); color: var(--muted); }
-.badge-green  { background: rgba(34,197,94,0.15);   color: #22c55e; }
+.badge-green  { background: rgba(34,197,94,0.15);   color: var(--success); }
 
 /* ── Filter bar ─────────────────────────────────────── */
 
@@ -323,7 +336,7 @@ td.flag  { font-size: 0.75rem; }
   width: 100%;
   border-radius: 4px;
   border: 1px solid var(--border);
-  background: #0a0e17;
+  background: var(--bg);
   margin-top: .5rem;
 }
 
@@ -358,7 +371,7 @@ td.flag  { font-size: 0.75rem; }
 .map-filter-btn.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--white);
 }
 
 .map-overlay-toggle {
@@ -390,7 +403,7 @@ td.flag  { font-size: 0.75rem; }
 
 /* Leaflet overrides — dark theme */
 .leaflet-container {
-  background: #0a0e17 !important;
+  background: var(--bg) !important;
   font-family: var(--font) !important;
 }
 .leaflet-control-zoom a {
@@ -441,7 +454,7 @@ td.flag  { font-size: 0.75rem; }
   border: 1px solid var(--border) !important;
   color: var(--text) !important;
   border-radius: 6px !important;
-  box-shadow: 0 4px 24px rgba(0,0,0,.6) !important;
+  box-shadow: 0 4px 24px var(--black) !important;
   padding: 0 !important;
 }
 .leaflet-popup-tip-container { display: none; }
@@ -492,7 +505,7 @@ td.flag  { font-size: 0.75rem; }
 .vessel-profile-header {
   padding: .85rem 1rem .7rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(239,68,68,.04);
+  background: rgba(239, 68, 68, 0.04);
 }
 .vessel-profile-header-top {
   display: flex;
@@ -539,10 +552,10 @@ td.flag  { font-size: 0.75rem; }
   white-space: nowrap;
   flex-shrink: 0;
 }
-.risk-badge-critical { background: rgba(239,68,68,.18);  color: #ef4444; }
-.risk-badge-high     { background: rgba(249,115,22,.18); color: #f97316; }
-.risk-badge-medium   { background: rgba(234,179,8,.18);  color: #eab308; }
-.risk-badge-low      { background: rgba(34,197,94,.18);  color: #22c55e; }
+.risk-badge-critical { background: rgba(239,68,68,.18);  color: var(--danger); }
+.risk-badge-high     { background: rgba(249,115,22,.18); color: var(--accent); }
+.risk-badge-medium   { background: rgba(234,179,8,.18);  color: var(--warn); }
+.risk-badge-low      { background: rgba(34,197,94,.18);  color: var(--success); }
 
 /* Risk bar */
 .risk-bar {
@@ -710,3 +723,9 @@ td.flag  { font-size: 0.75rem; }
   font-size: .68rem;
   text-transform: uppercase;
 }
+
+/* Ownership Role Colors */
+.role-owner    { color: var(--role-owner) !important; }
+.role-operator { color: var(--role-operator) !important; }
+.role-manager  { color: var(--role-manager) !important; }
+.role-past     { color: var(--muted-dark) !important; }

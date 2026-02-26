@@ -46,7 +46,7 @@
 
   // ── Colour / size helpers ────────────────────────────────────────────────
   function riskColour(vessel) {
-    return vessel.risk_colour || "#475569";
+    return vessel.risk_colour || "#6b8299";
   }
 
   function riskRadius(vessel) {

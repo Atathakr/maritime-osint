@@ -179,14 +179,13 @@ async function fetchVesselDetail(imo) {
   }
 }
 
-const _ROLE_COLOUR = {
-  owner:         '#c0392b',
-  operator:      '#e67e22',
-  manager:       '#2980b9',
-  past_owner:    '#888',
-  past_operator: '#888',
-  past_manager:  '#888',
-};
+function getRoleClass(role) {
+  if (role === 'owner')    return 'role-owner';
+  if (role === 'operator') return 'role-operator';
+  if (role === 'manager')  return 'role-manager';
+  return 'role-past';
+}
+
 const _ROLE_ORDER = ['owner','operator','manager','past_owner','past_operator','past_manager'];
 
 function ownershipDetailsHtml(hit) {
@@ -215,10 +214,10 @@ function ownershipDetailsHtml(hit) {
     const roles = [..._ROLE_ORDER, ...Object.keys(grouped).filter(r => !_ROLE_ORDER.includes(r))];
     for (const role of roles) {
       if (!grouped[role]) continue;
-      const colour = _ROLE_COLOUR[role] || '#888';
+      const roleCls = getRoleClass(role);
       const label  = role.replace(/_/g, ' ');
       body += `<div class="ownership-row">
-        <span class="ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        <span class="ownership-role ${roleCls}">${escHtml(label)}</span>
         ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
       </div>`;
     }
@@ -229,7 +228,7 @@ function ownershipDetailsHtml(hit) {
     const flags = [...new Set(hit.flag_history.map(f => f.flag_state).filter(Boolean))];
     if (flags.length) {
       body += `<div class="ownership-row">
-        <span class="ownership-role" style="color:#888">past flags</span>
+        <span class="ownership-role role-past">past flags</span>
         ${flags.map(f => `<span class="ownership-flag">${escHtml(f)}</span>`).join('')}
       </div>`;
     }
@@ -363,8 +362,6 @@ function renderVesselProfileHtml(detail) {
   const ownership  = (hit && Array.isArray(hit.ownership))    ? hit.ownership    : [];
   const flagHist   = (hit && Array.isArray(hit.flag_history)) ? hit.flag_history : [];
   const roleOrder  = ['owner','operator','manager','past_owner','past_operator','past_manager'];
-  const roleColour = { owner:'#c0392b', operator:'#e67e22', manager:'#2980b9',
-                       past_owner:'#888', past_operator:'#888', past_manager:'#888' };
 
   let ownershipBodyHtml = '';
   if (ownership.length) {
@@ -375,10 +372,10 @@ function renderVesselProfileHtml(detail) {
     const roles = [...roleOrder, ...Object.keys(grouped).filter(r => !roleOrder.includes(r))];
     for (const role of roles) {
       if (!grouped[role]) continue;
-      const colour = roleColour[role] || '#888';
+      const roleCls = getRoleClass(role);
       const label  = role.replace(/_/g, ' ');
       ownershipBodyHtml += `<div class="profile-ownership-row">
-        <span class="profile-ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        <span class="profile-ownership-role ${roleCls}">${escHtml(label)}</span>
         <span class="profile-ownership-names">
           ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
         </span>
@@ -390,7 +387,7 @@ function renderVesselProfileHtml(detail) {
     const flags = [...new Set(flagHist.map(f => f.flag_state).filter(Boolean))];
     if (flags.length) {
       ownershipBodyHtml += `<div class="profile-ownership-row">
-        <span class="profile-ownership-role" style="color:var(--muted)">past flags</span>
+        <span class="profile-ownership-role role-past">past flags</span>
         <span class="flag-chain">${flags.map(escHtml).join('<span class="flag-chain-arrow">→</span>')}</span>
       </div>`;
     }
