@@ -1,0 +1,77 @@
+/* layout.css — Containers and Structural Elements (Modern Vanilla) */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--fs-62) var(--s-6);
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  position: sticky; 
+  top: 0; 
+  z-index: 100;
+
+  .header-brand {
+    font-size: var(--fs-90);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .header-sub {
+    font-size: var(--fs-70);
+    color: var(--muted);
+    margin-left: var(--s-3);
+  }
+
+  .header-right { 
+    display: flex; 
+    align-items: center; 
+    gap: var(--s-4); 
+
+    & a { font-size: var(--fs-75); color: var(--muted); }
+  }
+}
+
+.main { 
+  padding: var(--s-5) var(--s-6); 
+  max-width: 1400px; 
+  margin: 0 auto; 
+}
+
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  margin-bottom: var(--s-5);
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--fs-62) var(--s-4);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-title {
+    font-size: var(--fs-72);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .panel-body { padding: var(--s-4); }
+}
+
+.two-col { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: var(--s-5); 
+  
+  @media (max-width: 900px) { 
+    grid-template-columns: 1fr; 
+  }
+}
+
+.span-all { grid-column: 1 / -1; }

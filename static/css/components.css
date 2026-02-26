@@ -1,0 +1,197 @@
+/* components.css — Reusable UI Components (Modern Vanilla) */
+
+/* ── Stat cards ─────────────────────────────────────── */
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-5);
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: var(--fs-90) var(--s-4);
+
+  .stat-label { font-size: var(--fs-70); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-value { 
+    font-size: var(--fs-xl); font-weight: 700; margin-top: 0.15rem; 
+    
+    &.accent  { color: var(--accent); }
+    &.info    { color: var(--info); }
+    &.danger  { color: var(--danger); }
+  }
+  .stat-sub   { font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
+}
+
+/* ── Buttons ───────────────────────────────────────── */
+
+.btn {
+  padding: var(--fs-62) var(--fs-100);
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  transition: opacity 0.15s, border-color 0.15s;
+
+  &.btn-primary { 
+    background: var(--accent); color: var(--black); 
+    &:hover { opacity: 0.88; }
+  }
+
+  &.btn-secondary { 
+    background: var(--card-bg2); color: var(--text); border: 1px solid var(--border); 
+    &:hover { border-color: var(--accent); }
+  }
+
+  &.btn-danger { background: var(--danger); color: var(--white); }
+  &.btn-sm     { padding: 0.35rem 0.7rem; font-size: 0.75rem; }
+  
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+/* ── Screening Input ────────────────────────────────── */
+
+.screen-row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: stretch;
+
+  .screen-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: var(--fs-62) 0.85rem;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: var(--fs-90);
+
+    &::placeholder { color: var(--muted); }
+    &:focus { outline: none; border-color: var(--accent); }
+  }
+}
+
+/* ── Tables ─────────────────────────────────────────── */
+
+.table-wrapper { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-78);
+
+  & th, & td {
+    text-align: left;
+    padding: 0.45rem var(--s-3);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  & th {
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: var(--fs-68);
+    letter-spacing: 0.06em;
+    background: var(--card-bg2);
+    position: sticky; 
+    top: 0; /* Header is sticky, so this should be 0 relative to parent or use a variable */
+  }
+
+  & tr:hover td { background: var(--table-hover); }
+
+  & td {
+    &.imo   { color: var(--info); font-weight: 600; }
+    &.name  { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    &.prog  { color: var(--warn); }
+    &.flag  { font-size: 0.75rem; }
+  }
+}
+
+/* ── Filters & Search ───────────────────────────────── */
+
+.filter-bar {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  padding: 0.65rem var(--s-4);
+  border-bottom: 1px solid var(--border);
+
+  .filter-input, .filter-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: var(--s-1) var(--fs-65);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: var(--fs-78);
+
+    &:focus { outline: none; border-color: var(--accent); }
+    & option { background: var(--card-bg); }
+  }
+  
+  .filter-input { 
+    min-width: 220px; 
+    &.wide { min-width: 180px; }
+    &.narrow { width: 70px; }
+  }
+}
+
+/* ── Ingest Cards ───────────────────────────────────── */
+
+.ingest-row { 
+  display: flex; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-3); 
+  &.align-start { align-items: flex-start; }
+}
+
+.ingest-card {
+  flex: 1; min-width: 200px;
+  background: var(--card-bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: var(--s-3) var(--s-4);
+
+  &.primary { flex: 2; }
+  &.side { min-width: 140px; flex: 0; }
+
+  & h3 { font-size: var(--fs-80); margin-bottom: var(--s-1); color: var(--text); }
+  & p  { font-size: var(--fs-72); color: var(--muted); margin-bottom: var(--s-2); }
+}
+
+.ingest-log-list { 
+  list-style: none; font-size: 0.72rem; 
+  
+  & li {
+    display: flex; justify-content: space-between;
+    padding: 0.3rem 0; border-bottom: 1px solid var(--border);
+    gap: var(--s-4);
+
+    & .log-src   { color: var(--text); }
+    & .log-count { color: var(--info); }
+    & .log-ok    { color: var(--success); }
+    & .log-err   { color: var(--danger); }
+    & .log-time  { color: var(--muted); text-align: right; }
+  }
+}
+
+/* ── Pagination ─────────────────────────────────────── */
+
+.pagination {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--fs-62) var(--s-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-75); color: var(--muted);
+
+  & span { flex: 1; }
+}
+
+/* ── Empty State ────────────────────────────────────── */
+
+.empty-state { text-align: center; color: var(--muted); padding: var(--s-6); font-size: var(--fs-80); }

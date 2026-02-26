@@ -46,7 +46,7 @@
 
   // ── Colour / size helpers ────────────────────────────────────────────────
   function riskColour(vessel) {
-    return vessel.risk_colour || "#475569";
+    return vessel.risk_colour || "#6b8299";
   }
 
   function riskRadius(vessel) {
@@ -74,8 +74,7 @@
     const name  = escHtml(v.vessel_name || "Unknown");
     const flag  = v.flag_state ? ` · ${escHtml(v.flag_state)}` : "";
     const sog   = v.sog != null ? `${v.sog} kn` : "—";
-    const badge = `<span class="badge badge-${riskBadgeClass(v.risk_level)}" ` +
-                  `style="font-size:.65rem;padding:.1rem .35rem;">${escHtml(v.risk_level)}</span>`;
+    const badge = `<span class="badge badge-${riskBadgeClass(v.risk_level)} badge-sm">${escHtml(v.risk_level)}</span>`;
     return `<div class="map-tooltip">
       <strong>${name}</strong>${flag}<br>
       MMSI: <code>${escHtml(v.mmsi || "—")}</code>&nbsp;
@@ -107,22 +106,22 @@
     const reasons = (v.risk_reasons || [])
       .map(r => `<li>${escHtml(r)}</li>`).join("") || "<li>No flags</li>";
     const tags = (v.source_tags || [])
-      .map(t => `<span class="badge badge-${tagBadgeClass(t)}" style="font-size:.65rem;">${escHtml(t)}</span>`)
+      .map(t => `<span class="badge badge-${tagBadgeClass(t)} fs-65">${escHtml(t)}</span>`)
       .join(" ") || "";
     
     const trackBtn = v.mmsi 
-      ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
+      ? `<button class="btn btn-secondary btn-sm mt-05 w-100"
            onclick="toggleVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
            ${v.mmsi === _trackMmsi ? "Hide Track" : "72h history"}
          </button>`
       : "";
 
     const screenBtn = v.imo_number
-      ? `<button class="btn btn-primary btn-sm" style="margin-top:.25rem;width:100%;"
+      ? `<button class="btn btn-primary btn-sm mt-025 w-100"
            onclick="document.getElementById('screen-query').value='${escAttr(v.imo_number)}';runScreening();">
            Screen this vessel
          </button>`
-      : `<button class="btn btn-secondary btn-sm" style="margin-top:.25rem;width:100%;"
+      : `<button class="btn btn-secondary btn-sm mt-025 w-100"
            onclick="document.getElementById('screen-query').value='${escAttr(v.mmsi||"")}';runScreening();">
            Screen this vessel (MMSI)
          </button>`;
@@ -138,9 +137,9 @@
         <tr><td>Destination</td><td>${dest}</td></tr>
         <tr><td>Last seen</td><td>${seen}</td></tr>
       </table>
-      <div style="margin:.4rem 0 .2rem;font-size:.72rem;color:var(--muted);">Risk factors</div>
+      <div class="mt-04 mb-02 fs-72 text-muted">Risk factors</div>
       <ul class="map-popup-risks">${reasons}</ul>
-      ${tags ? `<div style="margin-top:.35rem;">${tags}</div>` : ""}
+      ${tags ? `<div class="mt-035">${tags}</div>` : ""}
       ${trackBtn}
       ${screenBtn}
     </div>`;

@@ -1,0 +1,231 @@
+/* vessels.css — Vessel Profiles and Screening Results (Modern Vanilla) */
+
+#screen-result { margin-top: var(--s-4); }
+
+.result-clear    { color: var(--success); margin-top: var(--s-3); }
+.result-sanctioned { color: var(--danger); margin-top: var(--s-3); font-weight: 700; }
+
+/* ── Hit Card ───────────────────────────────────────── */
+
+.hit-card {
+  background: var(--card-bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  padding: var(--s-3) var(--s-4);
+  margin-top: var(--s-2);
+
+  & .hit-name  { font-size: var(--fs-90); font-weight: 700; color: var(--danger); }
+  & .hit-meta  { font-size: var(--fs-75); color: var(--muted); margin-top: var(--s-1); }
+  
+  & .hit-badge {
+    display: inline-block;
+    background: var(--danger);
+    color: var(--white);
+    font-size: 0.68rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+    margin-right: var(--s-1);
+    vertical-align: middle;
+
+    &.list-ofac { background: var(--ofac-red); }
+    &.list-opensanctions { background: var(--opensanctions-blue); }
+  }
+
+  & .confidence { font-size: 0.72rem; color: var(--warn); margin-top: var(--s-1); }
+}
+
+/* ── Vessel Profile ─────────────────────────────────── */
+
+.vessel-profile {
+  background: var(--card-bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--success); /* Default to green/safe */
+  border-radius: 5px;
+  margin-top: var(--s-3);
+  overflow: hidden;
+
+  /* CSS 2025: If profile contains a critical risk badge, change border to danger */
+  &:has(.risk-badge-critical) {
+    border-left-color: var(--danger);
+    & .vessel-profile-header { background: color-mix(in srgb, var(--danger), transparent 96%); }
+    & .vessel-profile-name { color: var(--danger); }
+  }
+
+  /* Same for high risk (accent) */
+  &:has(.risk-badge-high):not(:has(.risk-badge-critical)) {
+    border-left-color: var(--accent);
+    & .vessel-profile-header { background: color-mix(in srgb, var(--accent), transparent 96%); }
+    & .vessel-profile-name { color: var(--accent); }
+  }
+
+  .vessel-profile-header {
+    padding: var(--s-3) var(--s-4) var(--s-2);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--success), transparent 96%);
+  }
+
+  .vessel-profile-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--s-2);
+    margin-bottom: var(--s-1);
+  }
+
+  .vessel-profile-badges { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+
+  .vessel-profile-name {
+    font-size: var(--fs-100);
+    font-weight: 700;
+    color: var(--success);
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-2);
+    flex-wrap: wrap;
+  }
+
+  .vessel-profile-type { font-size: .72rem; font-weight: 400; color: var(--muted); }
+  .vessel-profile-ids { font-size: var(--fs-75); color: var(--muted); margin-top: var(--s-1); }
+  
+  .vessel-profile-risk-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-top: var(--s-2);
+  }
+}
+
+/* ── Risks ──────────────────────────────────────────── */
+
+.risk-badge {
+  font-size: .65rem;
+  font-weight: 700;
+  padding: .18rem .5rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &.risk-badge-critical { background: color-mix(in srgb, var(--danger), transparent 82%); color: var(--danger); }
+  &.risk-badge-high     { background: color-mix(in srgb, var(--accent), transparent 82%); color: var(--accent); }
+  &.risk-badge-medium   { background: color-mix(in srgb, var(--warn), transparent 82%);   color: var(--warn); }
+  &.risk-badge-low      { background: color-mix(in srgb, var(--success), transparent 82%); color: var(--success); }
+}
+
+.risk-bar {
+  flex: 1;
+  height: 6px;
+  background: color-mix(in srgb, var(--white), transparent 94%);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+
+  &-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .3s ease;
+
+    &.risk-badge-critical { background: var(--danger); }
+    &.risk-badge-high     { background: var(--accent); }
+    &.risk-badge-medium   { background: var(--warn); }
+    &.risk-badge-low      { background: var(--success); }
+  }
+}
+
+/* ── Profile Sections ───────────────────────────────── */
+
+.profile-section {
+  border-bottom: 1px solid var(--border);
+  &:last-child { border-bottom: none; }
+
+  &-title {
+    font-size: var(--fs-65);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    padding: var(--s-2) var(--s-4) var(--s-1);
+  }
+
+  &-body {
+    padding: 0 var(--s-4) var(--s-3);
+  }
+}
+
+.profile-row {
+  font-size: var(--fs-75);
+  color: var(--text);
+  margin-bottom: var(--s-1);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1);
+
+  .profile-label {
+    color: var(--muted);
+    font-size: var(--fs-68);
+    min-width: 5rem;
+    flex-shrink: 0;
+  }
+}
+
+/* ── Ownership & Roles ─────────────────────────────── */
+
+.profile-ownership-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1);
+  font-size: .72rem;
+  margin-bottom: var(--s-1);
+
+  .profile-ownership-role {
+    font-size: var(--fs-65);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 600;
+    min-width: 7rem;
+    flex-shrink: 0;
+    
+    &.role-owner    { color: var(--role-owner); }
+    &.role-operator { color: var(--role-operator); }
+    &.role-manager  { color: var(--role-manager); }
+  }
+}
+
+.role-past { color: var(--muted-dark); }
+
+/* ── Ownership details toggle ───────────────────────── */
+
+.ownership-details {
+  margin-top: var(--s-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-1);
+
+  & > summary {
+    cursor: pointer;
+    font-size: .7rem;
+    color: var(--muted);
+    user-select: none;
+    list-style: none;
+    &::after { content: " ▸"; }
+  }
+
+  &[open] > summary {
+    color: var(--text);
+    &::after { content: " ▾"; }
+  }
+
+  .ownership-body { padding: var(--s-1) 0 var(--s-1); }
+  
+  .ownership-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s-1);
+    margin-bottom: var(--s-1);
+    font-size: .7rem;
+  }
+}
