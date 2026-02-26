@@ -1,0 +1,182 @@
+/* base.css — Variables, Resets, and Global Utilities (2026 Modern Vanilla) */
+
+:root {
+  /* Colors */
+  --bg:       #0a0e17;
+  --bg-darker: #05080c;
+  --card-bg:  #0f1923;
+  --card-bg2: #121e2b;
+  --border:   #1e2d3d;
+  --text:     #cdd9e5;
+  --muted:    #6b8299;
+  --accent:   #f97316;
+  --info:     #3b82f6;
+  --danger:   #ef4444;
+  --success:  #22c55e;
+  --warn:     #eab308;
+  --white:    #ffffff;
+  --black:    #000000;
+  --font:     'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* Ownership Roles */
+  --role-owner:    #c0392b;
+  --role-operator: #e67e22;
+  --role-manager:  #2980b9;
+
+  /* ── Spacing Grid (4px base) ────────────────────────── */
+  --s-1: 0.25rem;  /* 4px */
+  --s-2: 0.5rem;   /* 8px */
+  --s-3: 0.75rem;  /* 12px */
+  --s-4: 1rem;     /* 16px */
+  --s-5: 1.25rem;  /* 20px */
+  --s-6: 1.5rem;   /* 24px */
+
+  /* Typography Scale */
+  --fs-62: 0.62rem;
+  --fs-65: 0.65rem;
+  --fs-68: 0.68rem;
+  --fs-70: 0.70rem;
+  --fs-72: 0.72rem;
+  --fs-75: 0.75rem;
+  --fs-78: 0.78rem;
+  --fs-80: 0.80rem;
+  --fs-85: 0.85rem;
+  --fs-90: 0.90rem;
+  --fs-100: 1.0rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.6rem;
+
+  /* Component Dimensions */
+  --map-h: 480px;
+  --sidebar-w: 320px;
+  --input-min-w: 200px;
+}
+
+/* ── Resets ─────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.55;
+  interpolate-size: allow-keywords;
+}
+
+a { 
+  color: var(--accent); 
+  text-decoration: none; 
+  transition: text-decoration 0.2s ease;
+  &:hover { text-decoration: underline; }
+}
+
+/* ── Generic Utilities ──────────────────────────────── */
+
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  &.badge-red    { background: color-mix(in srgb, var(--danger), transparent 85%); color: var(--danger); }
+  &.badge-blue   { background: color-mix(in srgb, var(--info), transparent 85%);   color: var(--info); }
+  &.badge-orange { background: color-mix(in srgb, var(--accent), transparent 85%); color: var(--accent); }
+  &.badge-muted  { background: color-mix(in srgb, var(--muted), transparent 85%);  color: var(--muted); }
+  &.badge-green  { background: color-mix(in srgb, var(--success), transparent 85%); color: var(--success); }
+  &.badge-sm { font-size: 0.62rem; padding: 0.05rem 0.3rem; }
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle; 
+  margin-left: var(--s-2);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.text-muted   { color: var(--muted); }
+.text-danger  { color: var(--danger); }
+.text-info    { color: var(--info); }
+.text-accent  { color: var(--accent); }
+.text-success { color: var(--success); }
+.bg-danger  { background: var(--danger); }
+.bg-accent  { background: var(--accent); }
+.bg-warn    { background: var(--warn); }
+.bg-muted   { background: var(--muted); }
+.bg-info    { background: var(--info); }
+.mono { font-family: var(--font); }
+
+/* ── Layout & Spacing Aliases (Legacy Support) ──────── */
+.flex { display: flex; }
+.flex-center { display: flex; align-items: center; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
+.grid { display: grid; }
+
+/* Grid Aliases */
+.gap-05, .gap-2 { gap: var(--s-2); }
+.gap-075, .gap-3 { gap: var(--s-3); }
+.gap-1, .gap-4 { gap: var(--s-4); }
+
+/* Margin/Padding Aliases */
+.mt-025, .mt-1 { margin-top: var(--s-1); }
+.mt-05, .mt-2 { margin-top: var(--s-2); }
+.mt-075, .mt-3 { margin-top: var(--s-3); }
+.mt-1, .mt-4 { margin-top: var(--s-4); }
+
+.mb-025, .mb-1 { margin-bottom: var(--s-1); }
+.mb-05, .mb-2 { margin-bottom: var(--s-2); }
+.mb-075, .mb-3 { margin-bottom: var(--s-3); }
+.mb-1, .mb-4 { margin-bottom: var(--s-4); }
+
+.ml-025, .ml-1 { margin-left: var(--s-1); }
+.ml-05, .ml-2 { margin-left: var(--s-2); }
+.ml-075, .ml-3 { margin-left: var(--s-3); }
+
+.p-1 { padding: var(--s-1); }
+.p-2 { padding: var(--s-2); }
+.p-05, .p-2 { padding: var(--s-2); }
+.p-075, .p-3 { padding: var(--s-3); }
+.p-4 { padding: var(--s-4); }
+
+.pb-05 { padding-bottom: var(--s-2); }
+
+/* Typography Aliases */
+.fs-62 { font-size: var(--fs-62); }
+.fs-65 { font-size: var(--fs-65); }
+.fs-68 { font-size: var(--fs-68); }
+.fs-70 { font-size: var(--fs-70); }
+.fs-72 { font-size: var(--fs-72); }
+.fs-75 { font-size: var(--fs-75); }
+.fs-78 { font-size: var(--fs-78); }
+.fs-80 { font-size: var(--fs-80); }
+.fs-85 { font-size: var(--fs-85); }
+.fs-90 { font-size: var(--fs-90); }
+
+.fs-sm { font-size: 0.68rem; }
+.fs-md { font-size: 0.75rem; }
+.fs-lg { font-size: 0.85rem; }
+
+.fw-400 { font-weight: 400; }
+.fw-600 { font-weight: 600; }
+.fw-700 { font-weight: 700; }
+
+.nowrap { white-space: nowrap; }
+.cursor-pointer { cursor: pointer; }
+.w-100 { width: 100%; }
+.flex-1 { flex: 1; }
+
+.min-w-120 { min-width: 120px; }
+.min-w-130 { min-width: 130px; }
+.min-w-200 { min-width: 200px; }
+
+.max-h-260 { max-height: 260px; }
+.max-h-300 { max-height: 300px; }
+.max-h-320 { max-height: 320px; }

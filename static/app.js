@@ -135,10 +135,10 @@ async function runScreening() {
     const hitsWithImo = (result.hits || []).filter(h => h.imo_number);
     if (result.sanctioned && hitsWithImo.length > 0) {
       // Show a brief loading state while fetching details
-      el.innerHTML = `<div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
+      el.innerHTML = `<div class="result-sanctioned">
         ⚠ SANCTIONS MATCH — ${result.total_hits} hit${result.total_hits !== 1 ? 's' : ''}
         for <em>${escHtml(result.query)}</em>
-        <span class="text-muted" style="font-weight:400;">(by ${({ imo: 'IMO', mmsi: 'MMSI', name: 'name' }[result.query_type] || result.query_type)})</span>
+        <span class="text-muted fw-400">(by ${({ imo: 'IMO', mmsi: 'MMSI', name: 'name' }[result.query_type] || result.query_type)})</span>
       </div>`;
       // Fetch detail profiles in parallel for hits with IMOs
       const detailPromises = hitsWithImo.map(h => fetchVesselDetail(h.imo_number));
@@ -159,7 +159,7 @@ async function runScreening() {
       renderScreenResult(el, result);
     }
   } catch (e) {
-    el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">Error: ${escHtml(e.message)}</p>`;
+    el.innerHTML = `<p class="text-danger mt-05">Error: ${escHtml(e.message)}</p>`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'SCREEN';
@@ -255,11 +255,11 @@ function renderFlatHitCardHtml(hit) {
   const typeStr = hit.vessel_type || hit.entity_type || '';
   const memberCount = Array.isArray(hit.memberships) ? hit.memberships.length : 0;
   const memberNote  = memberCount > 1
-    ? `<span class="text-muted" style="font-size:.68rem;font-weight:400;">(${memberCount} list entries)</span>`
+    ? `<span class="text-muted fs-68 fw-400">(${memberCount} list entries)</span>`
     : '';
   return `
     <div class="hit-card">
-      <div style="display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap;">
+      <div class="flex-center gap-05 flex-wrap">
         ${sourceTagBadges(hit.source_tags)}
         <span class="hit-name">${escHtml(hit.entity_name)}</span>
         ${memberNote}
@@ -471,7 +471,7 @@ function renderVesselProfileHtml(detail) {
 
 function renderScreenResult(el, result) {
   if (result.error) {
-    el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">${escHtml(result.error)}</p>`;
+    el.innerHTML = `<p class="text-danger mt-05">${escHtml(result.error)}</p>`;
     return;
   }
 
@@ -480,11 +480,11 @@ function renderScreenResult(el, result) {
 
   if (!result.sanctioned) {
     el.innerHTML = `
-      <p class="result-clear" style="margin-top:.75rem;">
+      <p class="result-clear">
         ✓ No sanctions matches found for <strong>${escHtml(result.query)}</strong>
         <span class="text-muted">(searched by ${qtypeLabel})</span>
       </p>
-      <p class="text-muted" style="font-size:.72rem;margin-top:.3rem;">
+      <p class="text-muted fs-72 mt-03">
         Not listed on OFAC SDN or OpenSanctions. Absence does not confirm clean status —
         run full due diligence before transacting.
       </p>`;
@@ -492,10 +492,10 @@ function renderScreenResult(el, result) {
   }
 
   let html = `
-    <div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
+    <div class="result-sanctioned">
       ⚠ SANCTIONS MATCH — ${result.total_hits} hit${result.total_hits !== 1 ? 's' : ''}
       for <em>${escHtml(result.query)}</em>
-      <span class="text-muted" style="font-weight:400;">(by ${qtypeLabel})</span>
+      <span class="text-muted fw-400">(by ${qtypeLabel})</span>
     </div>`;
 
   for (const hit of result.hits) {
@@ -543,7 +543,7 @@ async function loadSanctions() {
     const rows = await apiFetch(`/api/sanctions?${params}`);
     renderSanctionsTable(rows);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-danger" style="padding:.75rem;">Error: ${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger p-075">Error: ${escHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -569,8 +569,8 @@ function renderSanctionsTable(rows) {
   document.getElementById('sanctions-next').disabled = rows.length < PAGE_SIZE;
 
   tbody.innerHTML = rows.map(r => `
-    <tr onclick="screenFromTable('${escAttr(r.imo_number || r.entity_name)}')" style="cursor:pointer;">
-      <td style="white-space:nowrap;">${sourceTagBadges(r.source_tags)}</td>
+    <tr onclick="screenFromTable('${escAttr(r.imo_number || r.entity_name)}')" class="cursor-pointer">
+      <td class="nowrap">${sourceTagBadges(r.source_tags)}</td>
       <td class="name" title="${escAttr(r.entity_name)}">${escHtml(r.entity_name)}</td>
       <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
       <td>${r.mmsi ? escHtml(r.mmsi) : '<span class="text-muted">—</span>'}</td>
@@ -595,10 +595,10 @@ function screenFromTable(query) {
   const cleanDigits = (query || '').replace(/\D/g, '');
   if (cleanDigits.length === 7) {
     const el = document.getElementById('screen-result');
-    el.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Loading vessel profile…</span>';
+    el.innerHTML = '<span class="text-muted fs-75">Loading vessel profile…</span>';
     fetchVesselDetail(cleanDigits).then(detail => {
       if (detail) {
-        el.innerHTML = `<div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
+        el.innerHTML = `<div class="result-sanctioned">
           ⚠ SANCTIONS PROFILE — IMO ${escHtml(cleanDigits)}
         </div>` + renderVesselProfileHtml(detail);
       } else {
@@ -753,7 +753,7 @@ async function loadAisVessels() {
       const lat = r.last_lat != null ? r.last_lat.toFixed(3) : '—';
       const lon = r.last_lon != null ? r.last_lon.toFixed(3) : '—';
       const seen = r.last_seen ? new Date(r.last_seen).toLocaleString() : '—';
-      return `<tr onclick="document.getElementById('screen-query').value='${escAttr(r.imo_number||r.mmsi)}';runScreening()" style="cursor:pointer;">
+      return `<tr onclick="document.getElementById('screen-query').value='${escAttr(r.imo_number||r.mmsi)}';runScreening()" class="cursor-pointer">
         <td class="imo">${escHtml(r.mmsi)}</td>
         <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
         <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
@@ -765,7 +765,7 @@ async function loadAisVessels() {
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-danger p-05">Error: ${escHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -802,11 +802,11 @@ async function loadDarkPeriods() {
         <td>${hrs}</td>
         <td>${dist}</td>
         <td>${r.risk_zone ? escHtml(r.risk_zone) : '<span class="text-muted">—</span>'}</td>
-        <td style="color:var(--danger)">${sanc}</td>
+        <td class="text-danger">${sanc}</td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-danger p-05">Error: ${escHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -882,7 +882,7 @@ async function loadStsEvents() {
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="11" class="text-danger" style="padding:.5rem;">Error: ${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-danger p-05">Error: ${escHtml(e.message)}</td></tr>`;
   }
 }
 

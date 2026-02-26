@@ -4,36 +4,42 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Maritime OSINT — Login</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dist/style.css') }}">
   <style>
     body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     .login-box {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 2.5rem 2rem;
+      padding: var(--s-6) var(--s-5);
       width: 100%;
       max-width: 360px;
+
+      & h1 { font-size: 1.1rem; margin-bottom: var(--s-1); color: var(--accent); }
+      & p  { font-size: var(--fs-80); color: var(--muted); margin-bottom: var(--s-5); }
+      
+      & input[type="password"] {
+        width: 100%; box-sizing: border-box;
+        background: var(--bg); border: 1px solid var(--border);
+        color: var(--text); padding: var(--fs-62) var(--s-3);
+        border-radius: 4px; font-family: inherit; font-size: var(--fs-90);
+        margin-bottom: var(--s-4);
+        
+        &:focus { outline: none; border-color: var(--accent); }
+      }
+
+      & button {
+        width: 100%; padding: 0.65rem;
+        background: var(--accent); color: var(--black);
+        border: none; border-radius: 4px;
+        font-family: inherit; font-size: var(--fs-90); font-weight: 600;
+        cursor: pointer;
+        
+        &:hover { opacity: 0.9; }
+      }
+
+      & .error { color: var(--danger); font-size: var(--fs-80); margin-top: var(--s-3); }
     }
-    .login-box h1 { font-size: 1.1rem; margin-bottom: 0.25rem; color: var(--accent); }
-    .login-box p  { font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; }
-    .login-box input[type="password"] {
-      width: 100%; box-sizing: border-box;
-      background: var(--bg); border: 1px solid var(--border);
-      color: var(--text); padding: 0.6rem 0.75rem;
-      border-radius: 4px; font-family: inherit; font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-    .login-box input[type="password"]:focus { outline: none; border-color: var(--accent); }
-    .login-box button {
-      width: 100%; padding: 0.65rem;
-      background: var(--accent); color: #000;
-      border: none; border-radius: 4px;
-      font-family: inherit; font-size: 0.9rem; font-weight: 600;
-      cursor: pointer;
-    }
-    .login-box button:hover { opacity: 0.9; }
-    .error { color: var(--danger); font-size: 0.8rem; margin-top: 0.75rem; }
   </style>
 </head>
 <body>

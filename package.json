@@ -1,0 +1,12 @@
+{
+  "name": "maritime-osint",
+  "version": "1.0.0",
+  "description": "Maritime OSINT Platform",
+  "scripts": {
+    "build:css": "lightningcss --bundle --minify --targets '>= 0.25%' static/style.css -o static/dist/style.css",
+    "watch:css": "lightningcss --bundle --watch --targets '>= 0.25%' static/style.css -o static/dist/style.css"
+  },
+  "devDependencies": {
+    "lightningcss-cli": "^1.29.1"
+  }
+}
