@@ -176,7 +176,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         flag_code = vessel["flag_normalized"]
     elif processed_hits and processed_hits[0].flag_state:
         flag_code = processed_hits[0].flag_state
-    flag_tier  = risk_config.FLAG_RISK_TIERS.get((flag_code or "").upper(), 0)
+    flag_tier  = risk_config.get_flag_tier(flag_code)
     flag_score = flag_tier * 7
 
     # ── Flag hopping (IND15) ──────────────────────────────────────────────
@@ -193,16 +193,18 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     elif processed_hits and processed_hits[0].mmsi:
         mmsi = processed_hits[0].mmsi
 
+    # Build indicator_summary — always include flag/hop signals; add AIS signals if MMSI available
     indicator_summary: schemas.IndicatorSummary | None = None
-    if mmsi:
-        try:
+    try:
+        if mmsi:
             raw = db.get_vessel_indicator_summary(mmsi)
-            # Attach flag/hop counts so the schema carries them through to the UI
-            raw["flag_risk_tier"] = flag_tier
-            raw["flag_hop_count"] = hop_count
-            indicator_summary = schemas.IndicatorSummary.model_validate(raw)
-        except Exception:
-            pass
+        else:
+            raw = {}
+        raw["flag_risk_tier"] = flag_tier
+        raw["flag_hop_count"] = hop_count
+        indicator_summary = schemas.IndicatorSummary.model_validate(raw)
+    except Exception:
+        pass
 
     # ── Composite risk score ──────────────────────────────────────────────
     if processed_hits:
