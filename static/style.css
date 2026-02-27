@@ -646,6 +646,7 @@ td.flag  { font-size: 0.75rem; }
 }
 .signal-warn   { color: var(--warn); }
 .signal-ok     { color: var(--success); }
+.signal-info   { color: var(--info); }
 .signal-indent {
   color: var(--muted);
   padding-left: 1.1rem;

@@ -220,9 +220,18 @@ class IndicatorSummary(BaseModel):
     ais_destination: str | None = None
     ais_lat: float | None = None
     ais_lon: float | None = None
+    # Flag state risk (IND17)
+    flag_risk_tier: int = 0
+    flag_hop_count: int = 0
+    # Speed anomalies / GPS spoofing proxy (IND10)
+    spoof_count: int = 0
+    spoof_last_ts: datetime | None = None
+    spoof_last_lat: float | None = None
+    spoof_last_lon: float | None = None
+    spoof_last_speed_kt: float | None = None
 
     @field_serializer(
-        "dp_last_ts", "sts_last_ts", "ais_last_seen", when_used="json"
+        "dp_last_ts", "sts_last_ts", "ais_last_seen", "spoof_last_ts", when_used="json"
     )
     def serialize_dt(self, dt: datetime | None, _info: FieldSerializationInfo) -> str | None:
         return dt.isoformat() if dt else None
@@ -234,7 +243,7 @@ class VesselDetail(BaseModel):
 
     risk_score formula:
       sanctioned → 100 (hard ceiling)
-      else       → min(min(dp_count×10, 40) + min(sts_count×15, 45), 99)
+      else       → min(min(dp×10,40) + min(sts×15,45) + tier×7 + min(hops×8,16) + min(spoof×8,24), 99)
     """
     imo_number: str
     vessel: dict | None = None

@@ -15,6 +15,7 @@ import ais_listener
 import dark_periods
 import noaa_ingest
 import sts_detection
+import spoofing
 import reconcile
 import map_data
 import schemas
@@ -416,6 +417,22 @@ def api_sts_events():
         offset=int(request.args.get("offset", 0)),
     )
     return jsonify(rows)
+
+
+# ── AIS Anomaly Detection ─────────────────────────────────────────────────
+
+@app.post("/api/ais/detect-anomalies")
+@login_required
+def api_detect_anomalies():
+    """
+    Run speed-anomaly detection (IND10) over recent AIS positions.
+    Body (all optional): {"threshold_kt": 50.0, "hours_back": 168}
+    """
+    data = request.get_json(silent=True) or {}
+    threshold = float(data.get("threshold_kt", 50.0))
+    hours_back = int(data.get("hours_back", 168))
+    result = spoofing.run_speed_anomaly_detection(threshold, hours_back)
+    return jsonify(result)
 
 
 # ── Map ───────────────────────────────────────────────────────────────────

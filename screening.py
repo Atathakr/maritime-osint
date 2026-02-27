@@ -18,6 +18,7 @@ import re
 
 import db
 import schemas
+import risk_config
 
 
 def _clean_imo(raw: str) -> str | None:
@@ -124,11 +125,18 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     """
     Full screening report for a known vessel (by IMO).
     Fetches the canonical vessel record, all sanctions list memberships,
-    and AIS intelligence signals (dark periods, STS events, last position).
+    and AIS intelligence signals (dark periods, STS events, last position,
+    speed anomalies, flag risk, and flag hopping).
 
     Risk score formula:
       sanctioned → 100 (hard ceiling)
-      else       → min(min(dp_count×10, 40) + min(sts_count×15, 45), 99)
+      else       → min(
+          min(dp×10, 40) + min(sts×15, 45)          (IND1 + IND7)
+          + flag_tier×7                              (IND17, max 21)
+          + min(hop_count×8, 16)                     (IND15)
+          + min(spoof_count×8, 24),                  (IND10)
+          99
+      )
 
     Returns a VesselDetail model.
     """
@@ -162,7 +170,22 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if all_tags:
         risk_factors.append(f"Listed on: {', '.join(sorted(all_tags))}")
 
-    # ── Indicator summary (dark periods + STS + AIS last-seen) ────────────
+    # ── Flag state risk (IND17) ───────────────────────────────────────────
+    flag_code: str | None = None
+    if vessel and vessel.get("flag_normalized"):
+        flag_code = vessel["flag_normalized"]
+    elif processed_hits and processed_hits[0].flag_state:
+        flag_code = processed_hits[0].flag_state
+    flag_tier  = risk_config.FLAG_RISK_TIERS.get((flag_code or "").upper(), 0)
+    flag_score = flag_tier * 7
+
+    # ── Flag hopping (IND15) ──────────────────────────────────────────────
+    flag_history = db.get_vessel_flag_history(imo_clean)
+    distinct_flags = len({f.get("flag_state") for f in flag_history if f.get("flag_state")})
+    hop_count  = max(0, distinct_flags - 1)
+    hop_score  = min(hop_count * 8, 16)
+
+    # ── Indicator summary (dark periods + STS + AIS + speed anomalies) ────
     # Prefer MMSI from vessel record; fall back to first sanctions hit
     mmsi: str | None = None
     if vessel and vessel.get("mmsi"):
@@ -174,6 +197,9 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if mmsi:
         try:
             raw = db.get_vessel_indicator_summary(mmsi)
+            # Attach flag/hop counts so the schema carries them through to the UI
+            raw["flag_risk_tier"] = flag_tier
+            raw["flag_hop_count"] = hop_count
             indicator_summary = schemas.IndicatorSummary.model_validate(raw)
         except Exception:
             pass
@@ -182,9 +208,14 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if processed_hits:
         risk_score = 100
     else:
-        dp  = indicator_summary.dp_count  if indicator_summary else 0
-        sts = indicator_summary.sts_count if indicator_summary else 0
-        risk_score = min(min(dp * 10, 40) + min(sts * 15, 45), 99)
+        dp    = indicator_summary.dp_count    if indicator_summary else 0
+        sts   = indicator_summary.sts_count   if indicator_summary else 0
+        spoof = indicator_summary.spoof_count if indicator_summary else 0
+        risk_score = min(
+            min(dp * 10, 40) + min(sts * 15, 45)
+            + flag_score + hop_score + min(spoof * 8, 24),
+            99,
+        )
 
     return schemas.VesselDetail(
         imo_number=imo_clean,

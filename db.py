@@ -431,6 +431,32 @@ def _init_postgres(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
 
+    # ── Session 8: AIS speed anomalies ────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_anomalies (
+            id               SERIAL PRIMARY KEY,
+            mmsi             VARCHAR(20) NOT NULL,
+            imo_number       VARCHAR(20),
+            vessel_name      VARCHAR(255),
+            anomaly_type     VARCHAR(50)  DEFAULT 'speed_jump',
+            event_ts         TIMESTAMPTZ  NOT NULL,
+            lat              DOUBLE PRECISION,
+            lon              DOUBLE PRECISION,
+            prev_lat         DOUBLE PRECISION,
+            prev_lon         DOUBLE PRECISION,
+            implied_speed_kt REAL,
+            distance_km      REAL,
+            time_delta_min   REAL,
+            risk_level       VARCHAR(20)  DEFAULT 'HIGH',
+            indicator_code   VARCHAR(10)  DEFAULT 'IND10',
+            created_at       TIMESTAMPTZ  DEFAULT NOW(),
+            UNIQUE(mmsi, event_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_anom_mmsi ON ais_anomalies(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_anom_ts   ON ais_anomalies(event_ts DESC)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -687,6 +713,32 @@ def _init_sqlite(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_mmsi2 ON sts_events(mmsi2)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_ts    ON sts_events(event_ts DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sts_risk  ON sts_events(risk_level)")
+
+    # ── Session 8: AIS speed anomalies ────────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ais_anomalies (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi             TEXT NOT NULL,
+            imo_number       TEXT,
+            vessel_name      TEXT,
+            anomaly_type     TEXT DEFAULT 'speed_jump',
+            event_ts         TEXT NOT NULL,
+            lat              REAL,
+            lon              REAL,
+            prev_lat         REAL,
+            prev_lon         REAL,
+            implied_speed_kt REAL,
+            distance_km      REAL,
+            time_delta_min   REAL,
+            risk_level       TEXT DEFAULT 'HIGH',
+            indicator_code   TEXT DEFAULT 'IND10',
+            created_at       TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, event_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_anom_mmsi ON ais_anomalies(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_anom_ts   ON ais_anomalies(event_ts DESC)")
 
 
 # ── Canonical vessel registry ─────────────────────────────────────────────
@@ -1165,15 +1217,111 @@ def get_vessel_flag_history(imo_number: str) -> list[dict]:
         return _rows(c)
 
 
+def get_speed_anomaly_summary(mmsi: str) -> dict:
+    """
+    Return speed-anomaly count and latest anomaly details for a given MMSI.
+
+    Returns a dict with keys:
+      spoof_count, spoof_last_ts, spoof_last_lat, spoof_last_lon, spoof_last_speed_kt
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    result: dict = {
+        "spoof_count": 0,
+        "spoof_last_ts": None,
+        "spoof_last_lat": None,
+        "spoof_last_lon": None,
+        "spoof_last_speed_kt": None,
+    }
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"SELECT COUNT(*) AS n FROM ais_anomalies WHERE mmsi = {p}", (mmsi,))
+        row = _row(c)
+        result["spoof_count"] = (row["n"] if row else 0) or 0
+
+        if result["spoof_count"] > 0:
+            c.execute(f"""
+                SELECT event_ts, lat, lon, implied_speed_kt
+                FROM ais_anomalies
+                WHERE mmsi = {p}
+                ORDER BY event_ts DESC
+                LIMIT 1
+            """, (mmsi,))
+            row = _row(c)
+            if row:
+                result["spoof_last_ts"]       = row.get("event_ts")
+                result["spoof_last_lat"]      = row.get("lat")
+                result["spoof_last_lon"]      = row.get("lon")
+                result["spoof_last_speed_kt"] = row.get("implied_speed_kt")
+    return result
+
+
+def upsert_speed_anomalies(anomalies: list[dict]) -> int:
+    """
+    Bulk-insert speed anomaly records.  Silently skips duplicates.
+    Returns the number of rows actually inserted.
+    """
+    if not anomalies:
+        return 0
+
+    inserted = 0
+    with _conn() as conn:
+        c = _cursor(conn)
+        for a in anomalies:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute("""
+                        INSERT INTO ais_anomalies
+                            (mmsi, imo_number, vessel_name, anomaly_type,
+                             event_ts, lat, lon, prev_lat, prev_lon,
+                             implied_speed_kt, distance_km, time_delta_min,
+                             risk_level, indicator_code)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (mmsi, event_ts) DO NOTHING
+                    """, (
+                        a.get("mmsi"), a.get("imo_number"), a.get("vessel_name"),
+                        a.get("anomaly_type", "speed_jump"),
+                        a.get("event_ts"),
+                        a.get("lat"), a.get("lon"),
+                        a.get("prev_lat"), a.get("prev_lon"),
+                        a.get("implied_speed_kt"), a.get("distance_km"),
+                        a.get("time_delta_min"),
+                        a.get("risk_level", "HIGH"), a.get("indicator_code", "IND10"),
+                    ))
+                    inserted += c.rowcount
+                else:
+                    c.execute("""
+                        INSERT OR IGNORE INTO ais_anomalies
+                            (mmsi, imo_number, vessel_name, anomaly_type,
+                             event_ts, lat, lon, prev_lat, prev_lon,
+                             implied_speed_kt, distance_km, time_delta_min,
+                             risk_level, indicator_code)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        a.get("mmsi"), a.get("imo_number"), a.get("vessel_name"),
+                        a.get("anomaly_type", "speed_jump"),
+                        a.get("event_ts"),
+                        a.get("lat"), a.get("lon"),
+                        a.get("prev_lat"), a.get("prev_lon"),
+                        a.get("implied_speed_kt"), a.get("distance_km"),
+                        a.get("time_delta_min"),
+                        a.get("risk_level", "HIGH"), a.get("indicator_code", "IND10"),
+                    ))
+                    inserted += conn.total_changes
+            except Exception:
+                pass  # Duplicate or constraint violation — skip
+    return inserted
+
+
 def get_vessel_indicator_summary(mmsi: str) -> dict:
     """
     Return dark period count + latest event, STS count + latest event,
-    and AIS last-seen data for a given MMSI.
+    AIS last-seen data, and speed-anomaly count + latest for a given MMSI.
 
     Returns a dict with keys:
       dp_count, dp_last_ts, dp_last_hours, dp_last_lat, dp_last_lon,
       sts_count, sts_last_ts, sts_last_lat, sts_last_lon,
-      ais_last_seen, ais_sog, ais_destination, ais_lat, ais_lon
+      ais_last_seen, ais_sog, ais_destination, ais_lat, ais_lon,
+      spoof_count, spoof_last_ts, spoof_last_lat, spoof_last_lon, spoof_last_speed_kt
     All optional fields default to None if no data exists.
     """
     p = "?" if _BACKEND == "sqlite" else "%s"
@@ -1185,6 +1333,8 @@ def get_vessel_indicator_summary(mmsi: str) -> dict:
         "sts_last_lat": None, "sts_last_lon": None,
         "ais_last_seen": None, "ais_sog": None,
         "ais_destination": None, "ais_lat": None, "ais_lon": None,
+        "spoof_count": 0, "spoof_last_ts": None,
+        "spoof_last_lat": None, "spoof_last_lon": None, "spoof_last_speed_kt": None,
     }
 
     with _conn() as conn:
@@ -1245,6 +1395,9 @@ def get_vessel_indicator_summary(mmsi: str) -> dict:
             result["ais_destination"]  = row.get("destination")
             result["ais_lat"]          = row.get("last_lat")
             result["ais_lon"]          = row.get("last_lon")
+
+    # ── Speed anomalies (separate connection) ─────────────────────────────
+    result.update(get_speed_anomaly_summary(mmsi))
 
     return result
 
@@ -1784,6 +1937,54 @@ def find_ais_gaps(mmsi: str | None = None, min_hours: float = 2.0,
         LIMIT {p}
     """
     params = [*mmsi_params, min_hours, limit]
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(query, params)
+        return _rows(c)
+
+
+def get_consecutive_ais_pairs(
+    mmsi: str | None = None,
+    hours_back: int = 168,
+    limit: int = 5000,
+) -> list[dict]:
+    """
+    Return consecutive AIS position pairs with time delta in minutes.
+    Used by spoofing.py for IND10 speed-anomaly detection.
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+
+    if _BACKEND == "sqlite":
+        cutoff  = f"datetime('now', '-{hours_back} hours')"
+        td_expr = "(julianday(next_ts) - julianday(position_ts)) * 1440"
+    else:
+        cutoff  = f"NOW() - INTERVAL '{hours_back} hours'"
+        td_expr = "EXTRACT(EPOCH FROM (next_ts - position_ts)) / 60"
+
+    mmsi_filter = f"AND mmsi = {p}" if mmsi else ""
+    mmsi_params = [mmsi] if mmsi else []
+
+    query = f"""
+        WITH ordered AS (
+            SELECT mmsi, imo_number, vessel_name,
+                   lat, lon, position_ts,
+                   LEAD(position_ts) OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_ts,
+                   LEAD(lat)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lat,
+                   LEAD(lon)         OVER (PARTITION BY mmsi ORDER BY position_ts) AS next_lon
+            FROM ais_positions
+            WHERE position_ts >= {cutoff}
+            {mmsi_filter}
+        )
+        SELECT mmsi, imo_number, vessel_name,
+               position_ts, next_ts,
+               lat, lon, next_lat, next_lon,
+               {td_expr} AS time_delta_min
+        FROM ordered
+        WHERE next_ts IS NOT NULL
+        ORDER BY mmsi, position_ts
+        LIMIT {p}
+    """
+    params = mmsi_params + [limit]
     with _conn() as conn:
         c = _cursor(conn)
         c.execute(query, params)

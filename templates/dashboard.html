@@ -336,6 +336,34 @@
     </div>
   </div>
 
+  <!-- ── AIS Speed Anomalies ──────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">AIS Speed Anomaly Detection</span>
+      <span class="text-muted" style="font-size:.7rem;">Indicator 10 — GPS spoofing proxy (implied speed &gt; 50 kt)</span>
+    </div>
+    <div class="panel-body">
+
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
+        <button class="btn btn-primary btn-sm" id="btn-anomaly-detect" onclick="runAnomalyDetect()">
+          Detect Anomalies
+        </button>
+        <select id="anomaly-hours-back" class="filter-select" style="min-width:120px;">
+          <option value="48">Last 48 h</option>
+          <option value="168" selected>Last 7 days</option>
+          <option value="336">Last 14 days</option>
+        </select>
+        <span id="anomaly-detect-status" style="font-size:.78rem;"></span>
+      </div>
+
+      <p class="text-muted" style="font-size:.72rem;margin:0 0 .25rem;">
+        Scans consecutive AIS position pairs. Any pair implying &gt;50 kt is recorded as an IND10
+        anomaly and factored into the vessel risk score on next screening.
+      </p>
+
+    </div>
+  </div>
+
   <!-- ── NOAA Historical AIS ───────────────────────────── -->
   <div class="panel">
     <div class="panel-header">

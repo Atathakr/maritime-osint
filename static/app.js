@@ -408,10 +408,25 @@ function renderVesselProfileHtml(detail) {
   const sig = detail.indicator_summary;
   let signalsBodyHtml = '';
 
-  if (!sig || (!sig.dp_count && !sig.sts_count && !sig.ais_last_seen)) {
-    signalsBodyHtml = '<div class="signal-row text-muted">No AIS history on record for this vessel</div>';
-  } else {
-    // Dark periods
+  if (sig) {
+    // ── Flag state risk (IND17) ──────────────────────────────────────────
+    if (sig.flag_risk_tier > 0) {
+      const flagLabels = {
+        1: 'Open registry (Tier 1)',
+        2: 'Shadow fleet registry (Tier 2)',
+        3: 'High-risk / sanctioned registry (Tier 3)',
+      };
+      const tierLabel = flagLabels[sig.flag_risk_tier] || `Tier ${sig.flag_risk_tier}`;
+      const pts = sig.flag_risk_tier * 7;
+      const tierClass = sig.flag_risk_tier >= 2 ? 'signal-warn' : 'signal-info';
+      signalsBodyHtml += `<div class="signal-row ${tierClass}">⚑ ${escHtml(tierLabel)} (+${pts} pts) — IND17</div>`;
+    }
+    // ── Flag hopping (IND15) ─────────────────────────────────────────────
+    if (sig.flag_hop_count > 0) {
+      const hopDetail = `${sig.flag_hop_count} flag change${sig.flag_hop_count !== 1 ? 's' : ''} (IND15)`;
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(hopDetail)}</div>`;
+    }
+    // ── Dark periods (IND1) ──────────────────────────────────────────────
     if (sig.dp_count > 0) {
       let dpDetail = `${sig.dp_count} dark period${sig.dp_count !== 1 ? 's' : ''} (IND1)`;
       if (sig.dp_last_hours != null) dpDetail += `   last: ${sig.dp_last_hours.toFixed(0)}h gap`;
@@ -421,7 +436,7 @@ function renderVesselProfileHtml(detail) {
       }
       signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(dpDetail)}</div>`;
     }
-    // STS events
+    // ── STS events (IND7) ────────────────────────────────────────────────
     if (sig.sts_count > 0) {
       let stsDetail = `${sig.sts_count} STS event${sig.sts_count !== 1 ? 's' : ''} (IND7)`;
       if (sig.sts_last_ts) {
@@ -434,7 +449,17 @@ function renderVesselProfileHtml(detail) {
       }
       signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(stsDetail)}</div>`;
     }
-    // AIS last-seen
+    // ── Speed anomalies / GPS spoofing proxy (IND10) ─────────────────────
+    if (sig.spoof_count > 0) {
+      let spoofDetail = `${sig.spoof_count} speed anomal${sig.spoof_count !== 1 ? 'ies' : 'y'} (IND10)`;
+      if (sig.spoof_last_speed_kt != null) spoofDetail += `   last: ${sig.spoof_last_speed_kt.toFixed(0)} kt`;
+      if (sig.spoof_last_lat != null && sig.spoof_last_lon != null) {
+        spoofDetail += ` · ${sig.spoof_last_lat.toFixed(1)}°${sig.spoof_last_lat >= 0 ? 'N' : 'S'} `
+          + `${Math.abs(sig.spoof_last_lon).toFixed(1)}°${sig.spoof_last_lon >= 0 ? 'E' : 'W'}`;
+      }
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(spoofDetail)}</div>`;
+    }
+    // ── AIS last-seen ────────────────────────────────────────────────────
     if (sig.ais_last_seen) {
       const ts  = new Date(sig.ais_last_seen).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
       const sog = sig.ais_sog != null ? ` · SOG ${sig.ais_sog.toFixed(1)}kt` : '';
@@ -442,9 +467,12 @@ function renderVesselProfileHtml(detail) {
       if (sig.ais_destination) {
         signalsBodyHtml += `<div class="signal-row signal-indent">Destination:  ${escHtml(sig.ais_destination)}</div>`;
       }
-    } else if (!sig.dp_count && !sig.sts_count) {
-      signalsBodyHtml = '<div class="signal-row text-muted">No AIS history on record for this vessel</div>';
     }
+    if (!signalsBodyHtml) {
+      signalsBodyHtml = '<div class="signal-row text-muted">No intelligence signals on record for this vessel</div>';
+    }
+  } else {
+    signalsBodyHtml = '<div class="signal-row text-muted">No intelligence signals on record for this vessel</div>';
   }
 
   const signalsHtml = `<div class="profile-section">
@@ -917,6 +945,39 @@ async function runStsDetect() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Run Detection';
+  }
+}
+
+// ── AIS Anomaly Detection ──────────────────────────────
+
+async function runAnomalyDetect() {
+  const hoursBack  = parseInt(document.getElementById('anomaly-hours-back').value || '168', 10);
+  const btn        = document.getElementById('btn-anomaly-detect');
+  const statusEl   = document.getElementById('anomaly-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = `<span class="text-muted">Scanning last ${hoursBack} h of AIS positions for impossible speeds…</span>`;
+
+  try {
+    const result = await apiFetch('/api/ais/detect-anomalies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hours_back: hoursBack }),
+    });
+    const found = result.anomalies_found || 0;
+    statusEl.innerHTML =
+      `<span class="${found > 0 ? 'text-danger' : 'text-success'}">` +
+      `✓ ${found} anomal${found !== 1 ? 'ies' : 'y'} found · ` +
+      `${result.vessels_affected || 0} vessel${(result.vessels_affected || 0) !== 1 ? 's' : ''} affected · ` +
+      `${result.anomalies_inserted || 0} new records inserted` +
+      `</span>`;
+    await loadStats();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Detect Anomalies';
   }
 }
 
