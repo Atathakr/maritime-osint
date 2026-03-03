@@ -229,9 +229,27 @@ class IndicatorSummary(BaseModel):
     spoof_last_lat: float | None = None
     spoof_last_lon: float | None = None
     spoof_last_speed_kt: float | None = None
+    # STS in high-risk zones (IND8)
+    sts_risk_zone_count: int = 0
+    # Loitering (IND9)
+    loiter_count: int = 0
+    loiter_last_ts: datetime | None = None
+    loiter_last_lat: float | None = None
+    loiter_last_lon: float | None = None
+    loiter_last_hours: float | None = None
+    loiter_last_zone: str | None = None
+    # Sanctioned port calls (IND29)
+    port_count: int = 0
+    port_last_name: str | None = None
+    port_last_country: str | None = None
+    port_last_ts: datetime | None = None
+    port_last_level: str | None = None
+    # Vessel age (IND23) — set by screening.py from vessels_canonical.build_year
+    vessel_age: int | None = None
 
     @field_serializer(
-        "dp_last_ts", "sts_last_ts", "ais_last_seen", "spoof_last_ts", when_used="json"
+        "dp_last_ts", "sts_last_ts", "ais_last_seen", "spoof_last_ts",
+        "loiter_last_ts", "port_last_ts", when_used="json"
     )
     def serialize_dt(self, dt: datetime | None, _info: FieldSerializationInfo) -> str | None:
         return dt.isoformat() if dt else None
@@ -254,3 +272,9 @@ class VesselDetail(BaseModel):
     risk_score: int = 0
     sanctioned: bool = False
     indicator_summary: IndicatorSummary | None = None
+    # IND21: owner / operator / manager entities matching sanctions lists
+    owner_sanctions_hits: list[dict] = Field(default_factory=list)
+    # IND31: PSC detention records from Paris MOU / Tokyo MOU
+    psc_detentions: list[dict] = Field(default_factory=list)
+    # IND16: AIS vessel name vs canonical name discrepancy (informational)
+    name_discrepancy: str | None = None

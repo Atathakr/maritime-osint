@@ -53,6 +53,23 @@ FLAG_RISK_TIERS: dict[str, int] = {
     "KN": 1,   # St. Kitts & Nevis — open registry
 }
 
+# ── IND23: Vessel age scoring ──────────────────────────────────────────────
+# Shadow fleet tankers skew heavily old (75 %+ are ≥15 years, EPRS 2024).
+# Score: max(0, min((age - threshold) × pts_per_year, cap))
+IND23_AGE_THRESHOLD: int = 15   # years; no contribution below this
+IND23_PTS_PER_YEAR:  int = 3    # pts per year over threshold
+IND23_CAP:           int = 15   # maximum IND23 contribution
+
+# ── IND21: Ownership-chain sanctions match ─────────────────────────────────
+# Flat bonus applied per distinct sanctioned entity found in the ownership chain.
+IND21_OWNER_SANCTION: int = 20  # pts per sanctioned owner / operator / manager
+
+# ── IND31: PSC detention record ────────────────────────────────────────────
+# Paris MOU / Tokyo MOU public detention lists.
+# Each detention within the lookback window contributes pts, capped at IND31_CAP.
+IND31_PER_DETENTION: int = 10   # pts per detention in last 24 months
+IND31_CAP:           int = 20   # maximum IND31 contribution
+
 # ── Speed anomaly detection ────────────────────────────────────────────────
 # Merchant vessel maximum practical speed is ~25 knots.
 # 50 knots represents an unambiguous physical impossibility for any surface vessel.

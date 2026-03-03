@@ -15,6 +15,7 @@ vessel) with attached memberships list for data lineage.  Each hit includes:
 """
 
 import re
+from datetime import date
 
 import db
 import schemas
@@ -59,6 +60,45 @@ def _annotate_hit(hit: dict, query_type: str) -> None:
         hit["match_confidence"] = "HIGH — exact MMSI match"
     else:
         hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
+
+
+def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
+    """
+    Check whether any entity in the vessel's ownership / management chain
+    appears on a sanctions list (IND21).
+
+    Uses the existing fuzzy-name search against vessels_canonical.
+    Returns (hits_list, score_contribution).
+
+    Each hit dict:
+      entity_name    — the ownership-chain entity that matched
+      role           — e.g. 'owner', 'operator', 'manager'
+      source         — data source for the ownership record
+      matched_sanctions — list of up to 3 matching sanctioned entity names
+    """
+    ownership = db.get_vessel_ownership(canonical_id)
+    if not ownership:
+        return [], 0
+
+    found: list[dict] = []
+    seen: set[str] = set()
+
+    for entry in ownership:
+        entity_name = (entry.get("entity_name") or "").strip()
+        if not entity_name or entity_name in seen:
+            continue
+        seen.add(entity_name)
+        matches = db.search_sanctions_by_name(entity_name)
+        if matches:
+            found.append({
+                "entity_name":        entity_name,
+                "role":               entry.get("role"),
+                "source":             entry.get("source"),
+                "matched_sanctions":  [m.get("entity_name") for m in matches[:3]],
+            })
+
+    score = min(len(found) * risk_config.IND21_OWNER_SANCTION, 40)
+    return found, score
 
 
 def screen(query: str) -> schemas.ScreeningResult:
@@ -132,9 +172,12 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
       sanctioned → 100 (hard ceiling)
       else       → min(
           min(dp×10, 40) + min(sts×15, 45)          (IND1 + IND7)
+          + min(sts_zone_count×5, 10)                (IND8)
           + flag_tier×7                              (IND17, max 21)
           + min(hop_count×8, 16)                     (IND15)
-          + min(spoof_count×8, 24),                  (IND10)
+          + min(spoof_count×8, 24)                   (IND10)
+          + min(port_count×20, 40)                   (IND29)
+          + min(loiter_count×5, 15),                 (IND9)
           99
       )
 
@@ -142,6 +185,10 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     """
     imo_clean = re.sub(r"\D", "", imo)
     vessel = db.get_vessel(imo_clean)
+    # For vessels tracked via AIS but not listed in the sanctions DB, fall back
+    # to the ais_vessels table so the profile header has a name and MMSI.
+    if vessel is None:
+        vessel = db.get_ais_vessel_by_imo(imo_clean)
     sanctions_hits = db.search_sanctions_by_imo(imo_clean)
 
     processed_hits = []
@@ -206,16 +253,90 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     except Exception:
         pass
 
+    # ── Vessel age (IND23) ────────────────────────────────────────────────
+    build_year = vessel.get("build_year") if vessel else None
+    if build_year and isinstance(build_year, int):
+        vessel_age = date.today().year - build_year
+        age_score  = max(
+            0,
+            min(
+                (vessel_age - risk_config.IND23_AGE_THRESHOLD) * risk_config.IND23_PTS_PER_YEAR,
+                risk_config.IND23_CAP,
+            ),
+        )
+        if age_score > 0:
+            risk_factors.append(f"Vessel age: {vessel_age} years (+{age_score} pts, IND23)")
+    else:
+        vessel_age = None
+        age_score  = 0
+
+    # Attach vessel_age to indicator_summary so the frontend can render it
+    if indicator_summary is not None and vessel_age is not None:
+        indicator_summary.vessel_age = vessel_age
+
+    # ── IND21: Ownership-chain sanctions match ────────────────────────────
+    owner_sanctions_hits: list[dict] = []
+    owner_sanctions_score = 0
+    # Prefer canonical_id from vessel record (sanctions DB entry), else first hit
+    canonical_id_for_chain: str | None = None
+    if vessel and vessel.get("canonical_id"):
+        canonical_id_for_chain = vessel["canonical_id"]
+    elif processed_hits and processed_hits[0].canonical_id:
+        canonical_id_for_chain = processed_hits[0].canonical_id
+
+    if canonical_id_for_chain and not processed_hits:
+        # Only score ownership chain for vessels not directly sanctioned
+        owner_sanctions_hits, owner_sanctions_score = _check_ownership_chain(canonical_id_for_chain)
+        if owner_sanctions_hits:
+            names = ", ".join(h["entity_name"] for h in owner_sanctions_hits[:2])
+            risk_factors.append(
+                f"Ownership chain sanctions match: {names}"
+                + (f" and {len(owner_sanctions_hits) - 2} more" if len(owner_sanctions_hits) > 2 else "")
+                + f" (+{owner_sanctions_score} pts, IND21)"
+            )
+    elif canonical_id_for_chain:
+        # Still run the check for informational display even on sanctioned vessels
+        owner_sanctions_hits, _ = _check_ownership_chain(canonical_id_for_chain)
+
+    # ── IND16: Vessel name discrepancy (AIS vs canonical) ────────────────
+    name_discrepancy: str | None = None
+    if vessel and vessel.get("entity_name"):
+        canonical_name = vessel["entity_name"].strip().upper()
+        ais_vessel = db.get_ais_vessel_by_imo(imo_clean)
+        if ais_vessel and ais_vessel.get("vessel_name"):
+            ais_name = ais_vessel["vessel_name"].strip().upper()
+            if ais_name and ais_name != canonical_name:
+                # Flag only when neither name is a prefix/substring of the other
+                # (handles common cases like "VESSEL NAME" vs "VESSEL NAME I")
+                if canonical_name not in ais_name and ais_name not in canonical_name:
+                    name_discrepancy = f'AIS: "{ais_vessel["vessel_name"]}" ≠ Canonical: "{vessel["entity_name"]}"'
+
+    # ── IND31: PSC detention record ───────────────────────────────────────
+    psc_detentions = db.get_psc_detentions(imo_clean)
+    psc_score = min(len(psc_detentions) * risk_config.IND31_PER_DETENTION, risk_config.IND31_CAP)
+    if psc_detentions and not processed_hits:
+        authorities = sorted({d.get("authority", "") for d in psc_detentions if d.get("authority")})
+        risk_factors.append(
+            f"PSC detentions: {len(psc_detentions)} in last 24 months"
+            + (f" ({', '.join(authorities)})" if authorities else "")
+            + f" (+{psc_score} pts, IND31)"
+        )
+
     # ── Composite risk score ──────────────────────────────────────────────
     if processed_hits:
         risk_score = 100
     else:
-        dp    = indicator_summary.dp_count    if indicator_summary else 0
-        sts   = indicator_summary.sts_count   if indicator_summary else 0
-        spoof = indicator_summary.spoof_count if indicator_summary else 0
+        dp        = indicator_summary.dp_count           if indicator_summary else 0
+        sts       = indicator_summary.sts_count          if indicator_summary else 0
+        sts_zones = indicator_summary.sts_risk_zone_count if indicator_summary else 0
+        spoof     = indicator_summary.spoof_count        if indicator_summary else 0
+        port      = indicator_summary.port_count         if indicator_summary else 0
+        loiter    = indicator_summary.loiter_count       if indicator_summary else 0
         risk_score = min(
-            min(dp * 10, 40) + min(sts * 15, 45)
-            + flag_score + hop_score + min(spoof * 8, 24),
+            min(dp * 10, 40) + min(sts * 15, 45) + min(sts_zones * 5, 10)
+            + flag_score + hop_score + min(spoof * 8, 24)
+            + min(port * 20, 40) + min(loiter * 5, 15) + age_score
+            + owner_sanctions_score + psc_score,
             99,
         )
 
@@ -229,4 +350,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         risk_score=risk_score,
         sanctioned=len(processed_hits) > 0,
         indicator_summary=indicator_summary,
+        owner_sanctions_hits=owner_sanctions_hits,
+        psc_detentions=[dict(d) for d in psc_detentions],
+        name_discrepancy=name_discrepancy,
     )

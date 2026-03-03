@@ -19,6 +19,8 @@ import spoofing
 import reconcile
 import map_data
 import schemas
+import loitering
+import ports
 
 from pydantic import ValidationError
 
@@ -223,6 +225,33 @@ def api_ingest_opensanctions():
     return jsonify(result), code
 
 
+@app.post("/api/ingest/psc/<source>")
+@login_required
+def api_ingest_psc(source):
+    """
+    Download and ingest PSC detention records from Paris MOU or Tokyo MOU.
+    <source> must be 'paris' or 'tokyo'.
+    """
+    if source not in ("paris", "tokyo"):
+        return jsonify({"error": "Unknown PSC source. Use 'paris' or 'tokyo'."}), 400
+    label = f"PSC_{source.upper()}"
+    log_id = db.log_ingest_start(label)
+    try:
+        records  = ingest.fetch_psc_detentions(source)
+        inserted = db.upsert_psc_detentions(records)
+        db.log_ingest_complete(log_id, "success",
+                               processed=len(records), inserted=inserted, updated=0)
+        return jsonify({
+            "status":    "success",
+            "source":    label,
+            "processed": len(records),
+            "inserted":  inserted,
+        })
+    except Exception as exc:
+        db.log_ingest_complete(log_id, "error", error=str(exc))
+        return jsonify({"status": "error", "source": label, "error": str(exc)}), 502
+
+
 @app.get("/api/ingest/log")
 @login_required
 def api_ingest_log():
@@ -417,6 +446,39 @@ def api_sts_events():
         offset=int(request.args.get("offset", 0)),
     )
     return jsonify(rows)
+
+
+# ── Loitering Detection ───────────────────────────────────────────────────
+
+@app.post("/api/ais/detect-loitering")
+@login_required
+def api_detect_loitering():
+    """
+    Run open-water loitering detection (IND9) over recent AIS positions.
+    Body (all optional): {"sog_threshold_kt": 2.0, "min_hours": 12, "hours_back": 168}
+    """
+    data = request.get_json(silent=True) or {}
+    threshold = float(data.get("sog_threshold_kt", 2.0))
+    min_hours  = float(data.get("min_hours", 12.0))
+    hours_back = int(data.get("hours_back", 168))
+    result = loitering.run_loitering_detection(threshold, min_hours, hours_back)
+    return jsonify(result)
+
+
+# ── Sanctioned Port Detection ─────────────────────────────────────────────
+
+@app.post("/api/ports/detect-calls")
+@login_required
+def api_detect_port_calls():
+    """
+    Run sanctioned port call detection (IND29) over recent AIS positions.
+    Body (all optional): {"hours_back": 720}
+    Defaults to 30-day look-back (720 h).
+    """
+    data = request.get_json(silent=True) or {}
+    hours_back = int(data.get("hours_back", 720))
+    result = ports.run_port_call_detection(hours_back)
+    return jsonify(result)
 
 
 # ── AIS Anomaly Detection ─────────────────────────────────────────────────

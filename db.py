@@ -457,6 +457,75 @@ def _init_postgres(c) -> None:
     c.execute("CREATE INDEX IF NOT EXISTS idx_anom_mmsi ON ais_anomalies(mmsi)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_anom_ts   ON ais_anomalies(event_ts DESC)")
 
+    # ── Session 9: Loitering events (IND9) ────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS loitering_events (
+            id             SERIAL PRIMARY KEY,
+            mmsi           VARCHAR(20) NOT NULL,
+            imo_number     VARCHAR(20),
+            vessel_name    VARCHAR(255),
+            loiter_start   TIMESTAMPTZ NOT NULL,
+            loiter_end     TIMESTAMPTZ NOT NULL,
+            loiter_hours   REAL NOT NULL,
+            center_lat     DOUBLE PRECISION NOT NULL,
+            center_lon     DOUBLE PRECISION NOT NULL,
+            risk_zone      VARCHAR(100),
+            risk_level     VARCHAR(20),
+            sanctions_hit  BOOLEAN DEFAULT FALSE,
+            indicator_code VARCHAR(10) DEFAULT 'IND9',
+            created_at     TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, loiter_start)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_loiter_mmsi ON loitering_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_loiter_ts   ON loitering_events(loiter_start DESC)")
+
+    # ── Session 9: Sanctioned port calls (IND29) ──────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS port_calls (
+            id               SERIAL PRIMARY KEY,
+            mmsi             VARCHAR(20) NOT NULL,
+            imo_number       VARCHAR(20),
+            vessel_name      VARCHAR(255),
+            port_name        VARCHAR(200) NOT NULL,
+            port_country     VARCHAR(100) NOT NULL,
+            sanctions_level  VARCHAR(20)  NOT NULL,
+            arrival_ts       TIMESTAMPTZ  NOT NULL,
+            departure_ts     TIMESTAMPTZ,
+            center_lat       DOUBLE PRECISION NOT NULL,
+            center_lon       DOUBLE PRECISION NOT NULL,
+            distance_km      REAL,
+            indicator_code   VARCHAR(10) DEFAULT 'IND29',
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(mmsi, port_name, arrival_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portcall_mmsi ON port_calls(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portcall_ts   ON port_calls(arrival_ts DESC)")
+
+    # ── Session 10: PSC detention records (IND31) ─────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS psc_detentions (
+            id               SERIAL PRIMARY KEY,
+            imo_number       VARCHAR(20) NOT NULL,
+            vessel_name      VARCHAR(255),
+            flag_state       VARCHAR(100),
+            detention_date   DATE,
+            release_date     DATE,
+            port_name        VARCHAR(200),
+            port_country     VARCHAR(100),
+            authority        VARCHAR(50),
+            deficiency_count INTEGER,
+            list_source      VARCHAR(20),
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(imo_number, detention_date, authority)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_psc_imo ON psc_detentions(imo_number)")
+
 
 def _init_sqlite(c) -> None:
     c.execute("""
@@ -739,6 +808,75 @@ def _init_sqlite(c) -> None:
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_anom_mmsi ON ais_anomalies(mmsi)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_anom_ts   ON ais_anomalies(event_ts DESC)")
+
+    # ── Session 9: Loitering events (IND9) ────────────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS loitering_events (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi           TEXT NOT NULL,
+            imo_number     TEXT,
+            vessel_name    TEXT,
+            loiter_start   TEXT NOT NULL,
+            loiter_end     TEXT NOT NULL,
+            loiter_hours   REAL NOT NULL,
+            center_lat     REAL NOT NULL,
+            center_lon     REAL NOT NULL,
+            risk_zone      TEXT,
+            risk_level     TEXT,
+            sanctions_hit  INTEGER DEFAULT 0,
+            indicator_code TEXT DEFAULT 'IND9',
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, loiter_start)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_loiter_mmsi ON loitering_events(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_loiter_ts   ON loitering_events(loiter_start DESC)")
+
+    # ── Session 9: Sanctioned port calls (IND29) ──────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS port_calls (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            mmsi            TEXT NOT NULL,
+            imo_number      TEXT,
+            vessel_name     TEXT,
+            port_name       TEXT NOT NULL,
+            port_country    TEXT NOT NULL,
+            sanctions_level TEXT NOT NULL,
+            arrival_ts      TEXT NOT NULL,
+            departure_ts    TEXT,
+            center_lat      REAL NOT NULL,
+            center_lon      REAL NOT NULL,
+            distance_km     REAL,
+            indicator_code  TEXT DEFAULT 'IND29',
+            created_at      TEXT DEFAULT (datetime('now')),
+            UNIQUE(mmsi, port_name, arrival_ts)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portcall_mmsi ON port_calls(mmsi)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_portcall_ts   ON port_calls(arrival_ts DESC)")
+
+    # ── Session 10: PSC detention records (IND31) ─────────────────────────
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS psc_detentions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            imo_number      TEXT NOT NULL,
+            vessel_name     TEXT,
+            flag_state      TEXT,
+            detention_date  TEXT,
+            release_date    TEXT,
+            port_name       TEXT,
+            port_country    TEXT,
+            authority       TEXT,
+            deficiency_count INTEGER,
+            list_source     TEXT,
+            created_at      TEXT DEFAULT (datetime('now')),
+            UNIQUE(imo_number, detention_date, authority)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_psc_imo ON psc_detentions(imo_number)")
 
 
 # ── Canonical vessel registry ─────────────────────────────────────────────
@@ -1154,6 +1292,20 @@ def get_vessel(imo: str) -> dict | None:
     return r
 
 
+def get_ais_vessel_by_imo(imo: str) -> dict | None:
+    """Look up an AIS vessel record by IMO number (fallback for vessels not in sanctions DB)."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(
+            f"SELECT mmsi, imo_number, vessel_name, vessel_type, call_sign, "
+            f"flag_state, last_lat, last_lon, last_sog, last_seen, destination "
+            f"FROM ais_vessels WHERE imo_number = {p} LIMIT 1",
+            (imo,),
+        )
+        return _row(c)
+
+
 def get_vessel_count() -> int:
     with _conn() as conn:
         c = conn.cursor()
@@ -1253,6 +1405,284 @@ def get_speed_anomaly_summary(mmsi: str) -> dict:
                 result["spoof_last_lon"]      = row.get("lon")
                 result["spoof_last_speed_kt"] = row.get("implied_speed_kt")
     return result
+
+
+def get_loitering_summary(mmsi: str) -> dict:
+    """
+    Return loitering count and latest event details for a given MMSI.
+
+    Returns a dict with keys:
+      loiter_count, loiter_last_ts, loiter_last_lat, loiter_last_lon,
+      loiter_last_hours, loiter_last_zone
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    result: dict = {
+        "loiter_count": 0,
+        "loiter_last_ts": None,
+        "loiter_last_lat": None,
+        "loiter_last_lon": None,
+        "loiter_last_hours": None,
+        "loiter_last_zone": None,
+    }
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"SELECT COUNT(*) AS n FROM loitering_events WHERE mmsi = {p}", (mmsi,))
+        row = _row(c)
+        result["loiter_count"] = (row["n"] if row else 0) or 0
+
+        if result["loiter_count"] > 0:
+            c.execute(f"""
+                SELECT loiter_start, center_lat, center_lon, loiter_hours, risk_zone
+                FROM loitering_events
+                WHERE mmsi = {p}
+                ORDER BY loiter_start DESC
+                LIMIT 1
+            """, (mmsi,))
+            row = _row(c)
+            if row:
+                result["loiter_last_ts"]    = row.get("loiter_start")
+                result["loiter_last_lat"]   = row.get("center_lat")
+                result["loiter_last_lon"]   = row.get("center_lon")
+                result["loiter_last_hours"] = row.get("loiter_hours")
+                result["loiter_last_zone"]  = row.get("risk_zone")
+    return result
+
+
+def upsert_loitering_events(episodes: list[dict]) -> int:
+    """
+    Bulk-insert loitering event records.  Silently skips duplicates.
+    Returns the number of rows actually inserted.
+    """
+    if not episodes:
+        return 0
+
+    inserted = 0
+    with _conn() as conn:
+        c = _cursor(conn)
+        for e in episodes:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute("""
+                        INSERT INTO loitering_events
+                            (mmsi, imo_number, vessel_name,
+                             loiter_start, loiter_end, loiter_hours,
+                             center_lat, center_lon,
+                             risk_zone, risk_level, sanctions_hit, indicator_code)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (mmsi, loiter_start) DO NOTHING
+                    """, (
+                        e.get("mmsi"), e.get("imo_number"), e.get("vessel_name"),
+                        e.get("loiter_start"), e.get("loiter_end"), e.get("loiter_hours"),
+                        e.get("center_lat"), e.get("center_lon"),
+                        e.get("risk_zone"), e.get("risk_level"),
+                        e.get("sanctions_hit", False), e.get("indicator_code", "IND9"),
+                    ))
+                    inserted += c.rowcount
+                else:
+                    c.execute("""
+                        INSERT OR IGNORE INTO loitering_events
+                            (mmsi, imo_number, vessel_name,
+                             loiter_start, loiter_end, loiter_hours,
+                             center_lat, center_lon,
+                             risk_zone, risk_level, sanctions_hit, indicator_code)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        e.get("mmsi"), e.get("imo_number"), e.get("vessel_name"),
+                        e.get("loiter_start"), e.get("loiter_end"), e.get("loiter_hours"),
+                        e.get("center_lat"), e.get("center_lon"),
+                        e.get("risk_zone"), e.get("risk_level"),
+                        1 if e.get("sanctions_hit") else 0, e.get("indicator_code", "IND9"),
+                    ))
+                    inserted += conn.total_changes
+            except Exception:
+                pass
+    return inserted
+
+
+def get_port_call_summary(mmsi: str) -> dict:
+    """
+    Return sanctioned port call count and latest event details for a given MMSI.
+
+    Returns a dict with keys:
+      port_count, port_last_name, port_last_country, port_last_ts, port_last_level
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    result: dict = {
+        "port_count": 0,
+        "port_last_name": None,
+        "port_last_country": None,
+        "port_last_ts": None,
+        "port_last_level": None,
+    }
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"SELECT COUNT(*) AS n FROM port_calls WHERE mmsi = {p}", (mmsi,))
+        row = _row(c)
+        result["port_count"] = (row["n"] if row else 0) or 0
+
+        if result["port_count"] > 0:
+            c.execute(f"""
+                SELECT arrival_ts, port_name, port_country, sanctions_level
+                FROM port_calls
+                WHERE mmsi = {p}
+                ORDER BY arrival_ts DESC
+                LIMIT 1
+            """, (mmsi,))
+            row = _row(c)
+            if row:
+                result["port_last_ts"]      = row.get("arrival_ts")
+                result["port_last_name"]    = row.get("port_name")
+                result["port_last_country"] = row.get("port_country")
+                result["port_last_level"]   = row.get("sanctions_level")
+    return result
+
+
+def upsert_port_calls(calls: list[dict]) -> int:
+    """
+    Bulk-insert port call records.  Silently skips duplicates.
+    Returns the number of rows actually inserted.
+    """
+    if not calls:
+        return 0
+
+    inserted = 0
+    with _conn() as conn:
+        c = _cursor(conn)
+        for pc in calls:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute("""
+                        INSERT INTO port_calls
+                            (mmsi, imo_number, vessel_name,
+                             port_name, port_country, sanctions_level,
+                             arrival_ts, departure_ts,
+                             center_lat, center_lon, distance_km, indicator_code)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (mmsi, port_name, arrival_ts) DO NOTHING
+                    """, (
+                        pc.get("mmsi"), pc.get("imo_number"), pc.get("vessel_name"),
+                        pc.get("port_name"), pc.get("port_country"), pc.get("sanctions_level"),
+                        pc.get("arrival_ts"), pc.get("departure_ts"),
+                        pc.get("center_lat"), pc.get("center_lon"),
+                        pc.get("distance_km"), pc.get("indicator_code", "IND29"),
+                    ))
+                    inserted += c.rowcount
+                else:
+                    c.execute("""
+                        INSERT OR IGNORE INTO port_calls
+                            (mmsi, imo_number, vessel_name,
+                             port_name, port_country, sanctions_level,
+                             arrival_ts, departure_ts,
+                             center_lat, center_lon, distance_km, indicator_code)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        pc.get("mmsi"), pc.get("imo_number"), pc.get("vessel_name"),
+                        pc.get("port_name"), pc.get("port_country"), pc.get("sanctions_level"),
+                        pc.get("arrival_ts"), pc.get("departure_ts"),
+                        pc.get("center_lat"), pc.get("center_lon"),
+                        pc.get("distance_km"), pc.get("indicator_code", "IND29"),
+                    ))
+                    inserted += conn.total_changes
+            except Exception:
+                pass
+    return inserted
+
+
+def get_psc_detentions(imo: str, months_back: int = 24) -> list[dict]:
+    """
+    Return PSC detention records for a vessel within the last N months (IND31).
+
+    Returns a list of dicts with keys:
+      imo_number, vessel_name, detention_date, release_date,
+      port_name, port_country, authority, deficiency_count
+    """
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        if _BACKEND == "postgres":
+            c.execute(f"""
+                SELECT imo_number, vessel_name, detention_date, release_date,
+                       port_name, port_country, authority, deficiency_count
+                FROM psc_detentions
+                WHERE imo_number = {p}
+                  AND detention_date >= (CURRENT_DATE - INTERVAL '{months_back} months')
+                ORDER BY detention_date DESC
+            """, (imo,))
+        else:
+            # SQLite: date arithmetic via date()
+            c.execute(f"""
+                SELECT imo_number, vessel_name, detention_date, release_date,
+                       port_name, port_country, authority, deficiency_count
+                FROM psc_detentions
+                WHERE imo_number = {p}
+                  AND detention_date >= date('now', '-{months_back} months')
+                ORDER BY detention_date DESC
+            """, (imo,))
+        rows = c.fetchall()
+    return [dict(r) for r in rows] if rows else []
+
+
+def upsert_psc_detentions(records: list[dict]) -> int:
+    """
+    Bulk-insert PSC detention records.  Silently skips exact duplicates
+    (same IMO + detention_date + authority).
+    Returns the number of rows actually inserted.
+    """
+    if not records:
+        return 0
+
+    inserted = 0
+    with _conn() as conn:
+        c = _cursor(conn)
+        for r in records:
+            try:
+                if _BACKEND == "postgres":
+                    c.execute("""
+                        INSERT INTO psc_detentions
+                            (imo_number, vessel_name, flag_state,
+                             detention_date, release_date,
+                             port_name, port_country, authority,
+                             deficiency_count, list_source)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (imo_number, detention_date, authority) DO NOTHING
+                    """, (
+                        r.get("imo_number"), r.get("vessel_name"), r.get("flag_state"),
+                        r.get("detention_date"), r.get("release_date"),
+                        r.get("port_name"), r.get("port_country"), r.get("authority"),
+                        r.get("deficiency_count"), r.get("list_source"),
+                    ))
+                    inserted += c.rowcount
+                else:
+                    c.execute("""
+                        INSERT OR IGNORE INTO psc_detentions
+                            (imo_number, vessel_name, flag_state,
+                             detention_date, release_date,
+                             port_name, port_country, authority,
+                             deficiency_count, list_source)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        r.get("imo_number"), r.get("vessel_name"), r.get("flag_state"),
+                        r.get("detention_date"), r.get("release_date"),
+                        r.get("port_name"), r.get("port_country"), r.get("authority"),
+                        r.get("deficiency_count"), r.get("list_source"),
+                    ))
+                    inserted += conn.total_changes
+            except Exception:
+                pass
+    return inserted
+
+
+def get_sts_zone_count(mmsi: str) -> int:
+    """Count STS events in a named high-risk zone for a given MMSI (IND8)."""
+    p = "?" if _BACKEND == "sqlite" else "%s"
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(f"""
+            SELECT COUNT(*) AS n FROM sts_events
+            WHERE (mmsi1 = {p} OR mmsi2 = {p}) AND risk_zone IS NOT NULL
+        """, (mmsi, mmsi))
+        row = _row(c)
+        return (row["n"] if row else 0) or 0
 
 
 def upsert_speed_anomalies(anomalies: list[dict]) -> int:
@@ -1398,6 +1828,15 @@ def get_vessel_indicator_summary(mmsi: str) -> dict:
 
     # ── Speed anomalies (separate connection) ─────────────────────────────
     result.update(get_speed_anomaly_summary(mmsi))
+
+    # ── STS zone count (IND8) ─────────────────────────────────────────────
+    result["sts_risk_zone_count"] = get_sts_zone_count(mmsi)
+
+    # ── Loitering events (IND9) ───────────────────────────────────────────
+    result.update(get_loitering_summary(mmsi))
+
+    # ── Sanctioned port calls (IND29) ────────────────────────────────────
+    result.update(get_port_call_summary(mmsi))
 
     return result
 

@@ -10,6 +10,9 @@ let sanctionsOffset = 0;
 // ── Init ──────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTabs();
+  initCollapsiblePanels();
+
   loadStats();
   loadSanctions();
   loadIngestLog();
@@ -30,6 +33,51 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-refresh vessel roster every 30 s
   setInterval(loadAisVessels, 30_000);
 });
+
+// ── Tab navigation ────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b  => b.classList.remove('active'));
+  document.getElementById('tab-'     + name).classList.add('active');
+  document.getElementById('tab-btn-' + name).classList.add('active');
+  localStorage.setItem('active-tab', name);
+}
+
+function initTabs() {
+  const saved = localStorage.getItem('active-tab');
+  if (saved && saved !== 'intel') switchTab(saved);
+}
+
+// ── Collapsible panels ────────────────────────────────
+
+function togglePanel(id) {
+  const panel = document.getElementById(id);
+  const isCollapsed = panel.classList.toggle('collapsed');
+  localStorage.setItem('panel-state-' + id, isCollapsed ? 'collapsed' : 'expanded');
+}
+
+function toggleAisRoster() {
+  const body    = document.getElementById('ais-roster-body');
+  const chevron = document.getElementById('ais-roster-chevron');
+  if (!body) return;
+  const isCollapsed = body.classList.toggle('collapsed');
+  chevron?.classList.toggle('rotated', isCollapsed);
+  localStorage.setItem('panel-state-ais-roster', isCollapsed ? 'collapsed' : 'expanded');
+}
+
+function initCollapsiblePanels() {
+  // Restore expanded state for panels that start collapsed by default
+  ['panel-sanctions', 'panel-dark-periods', 'panel-sts-events'].forEach(id => {
+    if (localStorage.getItem('panel-state-' + id) === 'expanded')
+      document.getElementById(id)?.classList.remove('collapsed');
+  });
+  // Restore AIS vessel roster state
+  if (localStorage.getItem('panel-state-ais-roster') === 'expanded') {
+    document.getElementById('ais-roster-body')?.classList.remove('collapsed');
+    document.getElementById('ais-roster-chevron')?.classList.remove('rotated');
+  }
+}
 
 // ── Stats ─────────────────────────────────────────────
 
@@ -155,7 +203,21 @@ async function runScreening() {
         }
       }
       el.innerHTML += profileHtml;
+    } else if (!result.sanctioned) {
+      // Not sanctioned — if the query is a 7-digit IMO, show the full
+      // intelligence profile anyway (risk score, indicator signals, etc.)
+      const cleanDigits = query.replace(/\D/g, '');
+      if (cleanDigits.length === 7) {
+        el.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Loading vessel intelligence profile…</span>';
+        fetchVesselDetail(cleanDigits).then(detail => {
+          el.innerHTML = detail ? renderVesselProfileHtml(detail) : '';
+          if (!detail) renderScreenResult(el, result);
+        }).catch(() => renderScreenResult(el, result));
+      } else {
+        renderScreenResult(el, result);
+      }
     } else {
+      // Sanctioned but no IMOs — show flat hit cards
       renderScreenResult(el, result);
     }
   } catch (e) {
@@ -179,14 +241,35 @@ async function fetchVesselDetail(imo) {
   }
 }
 
-const _ROLE_COLOUR = {
-  owner:         '#c0392b',
-  operator:      '#e67e22',
-  manager:       '#2980b9',
-  past_owner:    '#888',
-  past_operator: '#888',
-  past_manager:  '#888',
-};
+/**
+ * Open a full vessel intelligence profile directly by IMO number.
+ * Goes straight to the detail endpoint — bypasses the sanctions-only screen
+ * flow. Called from map popups, AIS vessel table rows, and the non-sanctioned
+ * branch of runScreening().
+ */
+async function openVesselProfile(imo) {
+  document.getElementById('screen-query').value = `IMO ${imo}`;
+  const el = document.getElementById('screen-result');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Loading vessel intelligence profile…</span>';
+  try {
+    const detail = await fetchVesselDetail(imo);
+    if (detail) {
+      el.innerHTML = renderVesselProfileHtml(detail);
+    } else {
+      el.innerHTML = `<p class="text-muted" style="margin-top:.5rem;">No profile found for IMO ${escHtml(imo)}</p>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<p class="text-danger" style="margin-top:.5rem;">Error: ${escHtml(e.message)}</p>`;
+  }
+}
+
+function getRoleClass(role) {
+  if (role === 'owner')    return 'role-owner';
+  if (role === 'operator') return 'role-operator';
+  if (role === 'manager')  return 'role-manager';
+  return 'role-past';
+}
 const _ROLE_ORDER = ['owner','operator','manager','past_owner','past_operator','past_manager'];
 
 function ownershipDetailsHtml(hit) {
@@ -215,10 +298,9 @@ function ownershipDetailsHtml(hit) {
     const roles = [..._ROLE_ORDER, ...Object.keys(grouped).filter(r => !_ROLE_ORDER.includes(r))];
     for (const role of roles) {
       if (!grouped[role]) continue;
-      const colour = _ROLE_COLOUR[role] || '#888';
       const label  = role.replace(/_/g, ' ');
       body += `<div class="ownership-row">
-        <span class="ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        <span class="ownership-role ${getRoleClass(role)}">${escHtml(label)}</span>
         ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
       </div>`;
     }
@@ -229,7 +311,7 @@ function ownershipDetailsHtml(hit) {
     const flags = [...new Set(hit.flag_history.map(f => f.flag_state).filter(Boolean))];
     if (flags.length) {
       body += `<div class="ownership-row">
-        <span class="ownership-role" style="color:#888">past flags</span>
+        <span class="ownership-role role-past">past flags</span>
         ${flags.map(f => `<span class="ownership-flag">${escHtml(f)}</span>`).join('')}
       </div>`;
     }
@@ -297,11 +379,20 @@ function renderVesselProfileHtml(detail) {
   else                  { riskLabel = 'LOW';       riskClass = 'risk-badge-low'; }
 
   // ── Header fields ───────────────────────────────────────────────────────
-  const entityName  = (hit && hit.entity_name) || vessel.entity_name || detail.imo_number;
-  const vesselType  = (hit && hit.vessel_type) || vessel.vessel_type || '';
-  const flagState   = (hit && hit.flag_state)  || vessel.flag_normalized || '';
+  // For non-sanctioned vessels, `hit` is null and `vessel` comes from ais_vessels
+  const entityName  = (hit && hit.entity_name)
+    || (vessel && (vessel.vessel_name || vessel.entity_name))
+    || detail.imo_number;
+  const vesselType  = (hit && hit.vessel_type)
+    || (vessel && typeof vessel.vessel_type === 'string' ? vessel.vessel_type : '')
+    || '';
+  const flagState   = (hit && hit.flag_state)
+    || (vessel && (vessel.flag_normalized || vessel.flag_state))
+    || '';
   const imoDisplay  = detail.imo_number ? `IMO ${detail.imo_number}` : '';
-  const mmsiDisplay = (hit && hit.mmsi) ? `MMSI ${hit.mmsi}` : (vessel.mmsi ? `MMSI ${vessel.mmsi}` : '');
+  const mmsiDisplay = (hit && hit.mmsi)
+    ? `MMSI ${hit.mmsi}`
+    : (vessel && vessel.mmsi ? `MMSI ${vessel.mmsi}` : '');
   const flagDisplay = flagState ? `🏴 ${escHtml(flagState)}` : '';
   const idMeta = [imoDisplay, mmsiDisplay, flagDisplay].filter(Boolean).join(' · ');
 
@@ -336,35 +427,65 @@ function renderVesselProfileHtml(detail) {
   </div>`;
 
   // ── SANCTIONS section ────────────────────────────────────────────────────
-  const programs = [];
-  for (const h of (detail.sanctions_hits || [])) {
-    if (h.program) {
-      for (const p of h.program.split(',')) {
-        const pt = p.trim();
-        if (pt && !programs.includes(pt)) programs.push(pt);
+  let sanctionsBodyHtml;
+  if (detail.sanctioned) {
+    const programs = [];
+    for (const h of (detail.sanctions_hits || [])) {
+      if (h.program) {
+        for (const p of h.program.split(',')) {
+          const pt = p.trim();
+          if (pt && !programs.includes(pt)) programs.push(pt);
+        }
       }
     }
+    const confidence = hit ? hit.match_confidence : '';
+    const listedOn   = detail.source_tags.join(' · ');
+    const memberNote = detail.total_memberships > 1
+      ? ` <span class="text-muted">(${detail.total_memberships} entries)</span>` : '';
+    sanctionsBodyHtml = `
+      ${programs.length ? `<div class="profile-row"><span class="profile-label">Program</span> ${programs.slice(0,5).map(escHtml).join(' · ')}</div>` : ''}
+      <div class="profile-row"><span class="profile-label">Listed on</span> ${escHtml(listedOn)}${memberNote}</div>
+      ${confidence ? `<div class="profile-row"><span class="profile-label">Match</span> <span class="text-warn">${escHtml(confidence)}</span></div>` : ''}`;
+  } else {
+    sanctionsBodyHtml = `
+      <div class="profile-row">
+        <span class="text-success" style="font-weight:600;">✓ NOT LISTED</span>
+        <span class="text-muted" style="margin-left:.5rem;font-size:.78rem;">— OFAC SDN · OpenSanctions</span>
+      </div>
+      <div class="profile-row text-muted" style="font-size:.7rem;">
+        Absence does not confirm clean status — evaluate indicators below before transacting.
+      </div>`;
   }
-  const confidence = hit ? hit.match_confidence : '';
-  const listedOn   = detail.source_tags.join(' · ');
-  const memberNote = detail.total_memberships > 1
-    ? ` <span class="text-muted">(${detail.total_memberships} entries)</span>` : '';
 
   const sanctionsHtml = `<div class="profile-section">
     <div class="profile-section-title">SANCTIONS</div>
-    <div class="profile-section-body">
-      ${programs.length ? `<div class="profile-row"><span class="profile-label">Program</span> ${programs.slice(0,5).map(escHtml).join(' · ')}</div>` : ''}
-      <div class="profile-row"><span class="profile-label">Listed on</span> ${escHtml(listedOn)}${memberNote}</div>
-      ${confidence ? `<div class="profile-row"><span class="profile-label">Match</span> <span class="text-warn">${escHtml(confidence)}</span></div>` : ''}
-    </div>
+    <div class="profile-section-body">${sanctionsBodyHtml}</div>
   </div>`;
+
+  // ── OWNERSHIP CHAIN EXPOSURE section (IND21) ─────────────────────────────
+  const ownerSanctions = Array.isArray(detail.owner_sanctions_hits) ? detail.owner_sanctions_hits : [];
+  let ownerSanctionsHtml = '';
+  if (ownerSanctions.length > 0) {
+    let ownerRows = '';
+    for (const entry of ownerSanctions) {
+      const roleLabel = entry.role ? escHtml(entry.role.replace(/_/g, ' ')) : 'Entity';
+      const matched   = (entry.matched_sanctions || []).slice(0, 3).map(escHtml).join(' · ');
+      ownerRows += `<div class="profile-row">
+          <span class="profile-label">${roleLabel}</span>
+          <span class="text-danger" style="font-weight:600;">${escHtml(entry.entity_name)}</span>
+        </div>
+        <div class="profile-row signal-indent fs-72 text-muted">Matches: ${matched}</div>`;
+    }
+    ownerSanctionsHtml = `<div class="profile-section">
+      <div class="profile-section-title">⚠ OWNERSHIP CHAIN EXPOSURE (IND21)</div>
+      <div class="profile-section-body">${ownerRows}</div>
+    </div>`;
+  }
 
   // ── OWNERSHIP CHAIN section ─────────────────────────────────────────────
   const ownership  = (hit && Array.isArray(hit.ownership))    ? hit.ownership    : [];
   const flagHist   = (hit && Array.isArray(hit.flag_history)) ? hit.flag_history : [];
   const roleOrder  = ['owner','operator','manager','past_owner','past_operator','past_manager'];
-  const roleColour = { owner:'#c0392b', operator:'#e67e22', manager:'#2980b9',
-                       past_owner:'#888', past_operator:'#888', past_manager:'#888' };
 
   let ownershipBodyHtml = '';
   if (ownership.length) {
@@ -375,10 +496,9 @@ function renderVesselProfileHtml(detail) {
     const roles = [...roleOrder, ...Object.keys(grouped).filter(r => !roleOrder.includes(r))];
     for (const role of roles) {
       if (!grouped[role]) continue;
-      const colour = roleColour[role] || '#888';
       const label  = role.replace(/_/g, ' ');
       ownershipBodyHtml += `<div class="profile-ownership-row">
-        <span class="profile-ownership-role" style="color:${colour}">${escHtml(label)}</span>
+        <span class="profile-ownership-role ${getRoleClass(role)}">${escHtml(label)}</span>
         <span class="profile-ownership-names">
           ${grouped[role].map(n => `<span class="ownership-name">${escHtml(n)}</span>`).join('')}
         </span>
@@ -390,7 +510,7 @@ function renderVesselProfileHtml(detail) {
     const flags = [...new Set(flagHist.map(f => f.flag_state).filter(Boolean))];
     if (flags.length) {
       ownershipBodyHtml += `<div class="profile-ownership-row">
-        <span class="profile-ownership-role" style="color:var(--muted)">past flags</span>
+        <span class="profile-ownership-role role-past">past flags</span>
         <span class="flag-chain">${flags.map(escHtml).join('<span class="flag-chain-arrow">→</span>')}</span>
       </div>`;
     }
@@ -426,6 +546,21 @@ function renderVesselProfileHtml(detail) {
       const hopDetail = `${sig.flag_hop_count} flag change${sig.flag_hop_count !== 1 ? 's' : ''} (IND15)`;
       signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(hopDetail)}</div>`;
     }
+    // ── Vessel age (IND23) ───────────────────────────────────────────────
+    if (sig.vessel_age != null) {
+      const AGE_THRESHOLD = 15;
+      const PTS_PER_YEAR  = 3;
+      const AGE_CAP       = 15;
+      if (sig.vessel_age >= AGE_THRESHOLD) {
+        const agePts    = Math.min((sig.vessel_age - AGE_THRESHOLD) * PTS_PER_YEAR, AGE_CAP);
+        const ageDetail = `Vessel age ${sig.vessel_age} yrs — built ${new Date().getFullYear() - sig.vessel_age}`
+          + (agePts > 0 ? ` (+${agePts} pts, IND23)` : ` (IND23)`);
+        const ageClass  = sig.vessel_age >= 25 ? 'signal-warn' : 'signal-info';
+        signalsBodyHtml += `<div class="signal-row ${ageClass}">▲ ${escHtml(ageDetail)}</div>`;
+      } else {
+        signalsBodyHtml += `<div class="signal-row signal-info">◦ Vessel age ${sig.vessel_age} yrs (IND23 — below threshold)</div>`;
+      }
+    }
     // ── Dark periods (IND1) ──────────────────────────────────────────────
     if (sig.dp_count > 0) {
       let dpDetail = `${sig.dp_count} dark period${sig.dp_count !== 1 ? 's' : ''} (IND1)`;
@@ -459,6 +594,41 @@ function renderVesselProfileHtml(detail) {
       }
       signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(spoofDetail)}</div>`;
     }
+    // ── STS in high-risk zones (IND8) ────────────────────────────────────
+    if (sig.sts_risk_zone_count > 0) {
+      const zoneDetail = `${sig.sts_risk_zone_count} STS event${sig.sts_risk_zone_count !== 1 ? 's' : ''} in high-risk zone (IND8)`;
+      signalsBodyHtml += `<div class="signal-row signal-critical">⬥ ${escHtml(zoneDetail)}</div>`;
+    }
+    // ── Loitering (IND9) ─────────────────────────────────────────────────
+    if (sig.loiter_count > 0) {
+      let loiterDetail = `${sig.loiter_count} loitering episode${sig.loiter_count !== 1 ? 's' : ''} (IND9)`;
+      if (sig.loiter_last_hours != null) loiterDetail += `   last: ${sig.loiter_last_hours.toFixed(0)} h`;
+      if (sig.loiter_last_zone) loiterDetail += ` · ${sig.loiter_last_zone}`;
+      if (sig.loiter_last_lat != null && sig.loiter_last_lon != null) {
+        loiterDetail += ` · ${sig.loiter_last_lat.toFixed(1)}°${sig.loiter_last_lat >= 0 ? 'N' : 'S'} `
+          + `${Math.abs(sig.loiter_last_lon).toFixed(1)}°${sig.loiter_last_lon >= 0 ? 'E' : 'W'}`;
+      }
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(loiterDetail)}</div>`;
+    }
+    // ── Sanctioned port calls (IND29) ────────────────────────────────────
+    if (sig.port_count > 0) {
+      let portDetail = `${sig.port_count} sanctioned port call${sig.port_count !== 1 ? 's' : ''} (IND29)`;
+      if (sig.port_last_name) portDetail += `   last: ${sig.port_last_name}`;
+      if (sig.port_last_country) portDetail += `, ${sig.port_last_country}`;
+      if (sig.port_last_level) portDetail += ` [${sig.port_last_level}]`;
+      signalsBodyHtml += `<div class="signal-row signal-critical">⬥ ${escHtml(portDetail)}</div>`;
+    }
+    // ── PSC detentions (IND31) ────────────────────────────────────────────
+    const pscDets = Array.isArray(detail.psc_detentions) ? detail.psc_detentions : [];
+    if (pscDets.length > 0) {
+      let pscDetail = `${pscDets.length} PSC detention${pscDets.length !== 1 ? 's' : ''} in last 24 months (IND31)`;
+      const latestPsc = pscDets[0];
+      if (latestPsc.port_name) pscDetail += `   last: ${latestPsc.port_name}`;
+      if (latestPsc.port_country) pscDetail += `, ${latestPsc.port_country}`;
+      if (latestPsc.authority) pscDetail += ` [${latestPsc.authority}]`;
+      if (latestPsc.deficiency_count != null) pscDetail += ` · ${latestPsc.deficiency_count} deficiencies`;
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${escHtml(pscDetail)}</div>`;
+    }
     // ── AIS last-seen ────────────────────────────────────────────────────
     if (sig.ais_last_seen) {
       const ts  = new Date(sig.ais_last_seen).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
@@ -468,11 +638,25 @@ function renderVesselProfileHtml(detail) {
         signalsBodyHtml += `<div class="signal-row signal-indent">Destination:  ${escHtml(sig.ais_destination)}</div>`;
       }
     }
+    // ── Name discrepancy (IND16) ──────────────────────────────────────────
+    if (detail.name_discrepancy) {
+      signalsBodyHtml += `<div class="signal-row signal-warn">⚑ Name discrepancy (IND16): ${escHtml(detail.name_discrepancy)}</div>`;
+    }
     if (!signalsBodyHtml) {
       signalsBodyHtml = '<div class="signal-row text-muted">No intelligence signals on record for this vessel</div>';
     }
   } else {
-    signalsBodyHtml = '<div class="signal-row text-muted">No intelligence signals on record for this vessel</div>';
+    // sig is null — still check non-sig signals
+    if (detail.name_discrepancy) {
+      signalsBodyHtml += `<div class="signal-row signal-warn">⚑ Name discrepancy (IND16): ${escHtml(detail.name_discrepancy)}</div>`;
+    }
+    const pscDetsNoSig = Array.isArray(detail.psc_detentions) ? detail.psc_detentions : [];
+    if (pscDetsNoSig.length > 0) {
+      signalsBodyHtml += `<div class="signal-row signal-warn">▲ ${pscDetsNoSig.length} PSC detention${pscDetsNoSig.length !== 1 ? 's' : ''} in last 24 months (IND31)</div>`;
+    }
+    if (!signalsBodyHtml) {
+      signalsBodyHtml = '<div class="signal-row text-muted">No intelligence signals on record for this vessel</div>';
+    }
   }
 
   const signalsHtml = `<div class="profile-section">
@@ -495,6 +679,7 @@ function renderVesselProfileHtml(detail) {
     </div>
     ${identityHtml}
     ${sanctionsHtml}
+    ${ownerSanctionsHtml}
     ${ownershipHtml}
     ${signalsHtml}
   </div>`;
@@ -629,9 +814,7 @@ function screenFromTable(query) {
     el.innerHTML = '<span class="text-muted" style="font-size:.75rem;">Loading vessel profile…</span>';
     fetchVesselDetail(cleanDigits).then(detail => {
       if (detail) {
-        el.innerHTML = `<div class="result-sanctioned" style="margin-top:.75rem;font-weight:700;">
-          ⚠ SANCTIONS PROFILE — IMO ${escHtml(cleanDigits)}
-        </div>` + renderVesselProfileHtml(detail);
+        el.innerHTML = renderVesselProfileHtml(detail);
       } else {
         runScreening();
       }
@@ -682,6 +865,39 @@ async function runIngest(source) {
   }
 }
 
+async function runPscIngest(source) {
+  const btnId = `btn-ingest-psc-${source}`;
+  const btn = document.getElementById(btnId);
+  const statusEl = document.getElementById('ingest-status');
+
+  btn.disabled = true;
+  btn.innerHTML = `Fetching… <span class="spinner"></span>`;
+  statusEl.innerHTML = `<span class="text-muted">Downloading ${source === 'paris' ? 'Paris MOU' : 'Tokyo MOU'} detention list…</span>`;
+
+  try {
+    const result = await apiFetch(`/api/ingest/psc/${source}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (result.status === 'success') {
+      statusEl.innerHTML =
+        `<span class="text-success">✓ ${result.source}: ${fmt(result.inserted)} inserted ` +
+        `(${fmt(result.processed)} processed)</span>`;
+    } else {
+      statusEl.innerHTML =
+        `<span class="text-danger">✗ ${result.source}: ${escHtml(result.error || 'Unknown error')}</span>`;
+    }
+
+    await loadIngestLog();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">PSC ingest failed: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = source === 'paris' ? 'Fetch Paris MOU' : 'Fetch Tokyo MOU';
+  }
+}
+
 async function loadIngestLog() {
   try {
     const logs = await apiFetch('/api/ingest/log');
@@ -716,9 +932,14 @@ async function loadAisStatus() {
     const startBtn = document.getElementById('btn-ais-start');
     const stopBtn  = document.getElementById('btn-ais-stop');
 
-    if (s.running) {
+    if (s.running && s.connected) {
       badge.textContent = 'LIVE';
       badge.className = 'badge badge-green';
+      startBtn.disabled = true;
+      stopBtn.disabled  = false;
+    } else if (s.running && !s.connected) {
+      badge.textContent = 'RECONNECTING';
+      badge.className = 'badge badge-orange';
       startBtn.disabled = true;
       stopBtn.disabled  = false;
     } else {
@@ -784,7 +1005,7 @@ async function loadAisVessels() {
       const lat = r.last_lat != null ? r.last_lat.toFixed(3) : '—';
       const lon = r.last_lon != null ? r.last_lon.toFixed(3) : '—';
       const seen = r.last_seen ? new Date(r.last_seen).toLocaleString() : '—';
-      return `<tr onclick="document.getElementById('screen-query').value='${escAttr(r.imo_number||r.mmsi)}';runScreening()" style="cursor:pointer;">
+      return `<tr onclick="${r.imo_number ? `openVesselProfile('${escAttr(r.imo_number)}')` : `document.getElementById('screen-query').value='${escAttr(r.mmsi)}';runScreening()`}" style="cursor:pointer;">
         <td class="imo">${escHtml(r.mmsi)}</td>
         <td class="name" title="${escAttr(r.vessel_name||'')}">${escHtml(r.vessel_name||'—')}</td>
         <td class="imo">${r.imo_number ? escHtml(r.imo_number) : '<span class="text-muted">—</span>'}</td>
@@ -978,6 +1199,73 @@ async function runAnomalyDetect() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Detect Anomalies';
+  }
+}
+
+// ── Loitering Detection ────────────────────────────────
+
+async function runLoiteringDetect() {
+  const hoursBack = parseInt(document.getElementById('loiter-hours-back').value || '168', 10);
+  const btn       = document.getElementById('btn-loiter-detect');
+  const statusEl  = document.getElementById('loiter-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = `<span class="text-muted">Scanning last ${hoursBack} h of AIS positions for loitering…</span>`;
+
+  try {
+    const result = await apiFetch('/api/ais/detect-loitering', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hours_back: hoursBack }),
+    });
+    const found = result.episodes_found || 0;
+    statusEl.innerHTML =
+      `<span class="${found > 0 ? 'text-danger' : 'text-success'}">` +
+      `✓ ${found} episode${found !== 1 ? 's' : ''} found · ` +
+      `${result.vessels_affected || 0} vessel${(result.vessels_affected || 0) !== 1 ? 's' : ''} affected · ` +
+      `${result.episodes_inserted || 0} new records inserted` +
+      `</span>`;
+    await loadStats();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Detect Loitering';
+  }
+}
+
+// ── Sanctioned Port Detection ──────────────────────────
+
+async function runPortCallDetect() {
+  const hoursBack = parseInt(document.getElementById('port-hours-back').value || '720', 10);
+  const btn       = document.getElementById('btn-port-detect');
+  const statusEl  = document.getElementById('port-detect-status');
+
+  btn.disabled = true;
+  btn.innerHTML = 'Detecting… <span class="spinner"></span>';
+  statusEl.innerHTML = `<span class="text-muted">Scanning last ${hoursBack} h of AIS positions near sanctioned ports…</span>`;
+
+  try {
+    const result = await apiFetch('/api/ports/detect-calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hours_back: hoursBack }),
+    });
+    const found = result.calls_found || 0;
+    statusEl.innerHTML =
+      `<span class="${found > 0 ? 'text-danger' : 'text-success'}">` +
+      `✓ ${found} port call${found !== 1 ? 's' : ''} found · ` +
+      `${result.vessels_affected || 0} vessel${(result.vessels_affected || 0) !== 1 ? 's' : ''} affected · ` +
+      `${result.calls_inserted || 0} new records inserted · ` +
+      `${result.ports_scanned || 0} ports scanned` +
+      `</span>`;
+    await loadStats();
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-danger">Error: ${escHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Detect Port Calls';
   }
 }
 

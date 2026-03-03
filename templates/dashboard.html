@@ -12,7 +12,7 @@
 <body>
 
 <header class="header">
-  <div style="display:flex;align-items:center;">
+  <div class="flex-center">
     <span class="header-brand">MARITIME OSINT</span>
     <span class="header-sub">Sanctions &amp; Shadow Fleet Intelligence</span>
   </div>
@@ -24,101 +24,111 @@
 
 <main class="main">
 
-  <!-- ── Stats row ───────────────────────────────────── -->
-  <div class="stats-row" id="stats-row">
-    <div class="stat-card">
-      <div class="stat-label">OFAC SDN</div>
-      <div class="stat-value accent" id="stat-ofac">—</div>
-      <div class="stat-sub">vessel entries</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">OpenSanctions</div>
-      <div class="stat-value info" id="stat-opensanctions">—</div>
-      <div class="stat-sub">vessel entries</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">AIS Vessels</div>
-      <div class="stat-value" id="stat-ais-vessels">—</div>
-      <div class="stat-sub">tracked tankers</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Dark Periods</div>
-      <div class="stat-value danger" id="stat-dark-periods">—</div>
-      <div class="stat-sub">AIS gap events</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">STS Events</div>
-      <div class="stat-value accent" id="stat-sts-events">—</div>
-      <div class="stat-sub">IND7 — transfers</div>
-    </div>
-  </div>
+  <!-- ── Tab bar ─────────────────────────────────────── -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-intel" onclick="switchTab('intel')">Intelligence</button>
+    <button class="tab-btn"        id="tab-btn-sys"   onclick="switchTab('sys')">System</button>
+  </nav>
 
-  <!-- ── Vessel Screening ────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">Vessel Screening</span>
-      <span class="text-muted" style="font-size:0.7rem;">IMO number · MMSI · vessel name</span>
-    </div>
-    <div class="panel-body">
-      <div class="screen-row">
-        <input
-          type="text"
-          id="screen-query"
-          class="screen-input"
-          placeholder="e.g.  9876543  ·  123456789  ·  SKIPPER  ·  IMO 9876543"
-          autocomplete="off"
-        >
-        <button class="btn btn-primary" id="screen-btn" onclick="runScreening()">SCREEN</button>
+  <!-- ══════════════════════════════════════════════════ -->
+  <!--  Intelligence tab                                   -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div id="tab-intel" class="tab-pane active">
+
+    <!-- ── Stats row ─────────────────────────────────── -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">OFAC SDN</div>
+        <div class="stat-value accent" id="stat-ofac">—</div>
+        <div class="stat-sub">vessel entries</div>
       </div>
-      <div id="screen-result"></div>
-    </div>
-  </div>
-
-  <!-- ── Live Risk Map ─────────────────────────────────── -->
-  <div class="panel" id="map-panel">
-    <div class="panel-header">
-      <span class="panel-title">Live Risk Map</span>
-      <span id="map-vessel-count" class="text-muted" style="font-size:.72rem;"></span>
-    </div>
-    <div class="panel-body" style="padding-bottom:.5rem;">
-
-      <!-- Controls bar -->
-      <div class="map-controls">
-        <div class="map-filter-group">
-          <button class="map-filter-btn"        data-filter="all"          onclick="setMapFilter(this)">All</button>
-          <button class="map-filter-btn active" data-filter="medium_plus"  onclick="setMapFilter(this)">Medium+</button>
-          <button class="map-filter-btn"         data-filter="high_plus"    onclick="setMapFilter(this)">High+</button>
-          <button class="map-filter-btn"         data-filter="sanctioned"   onclick="setMapFilter(this)">Sanctioned</button>
-        </div>
-        <div style="display:flex;gap:.5rem;align-items:center;">
-          <label class="map-overlay-toggle" style="font-size:.72rem;">
-            <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">
-            OpenSeaMap
-          </label>
-          <button id="btn-clear-track" class="btn btn-secondary btn-sm" onclick="clearTrack()" disabled>No Active Track</button>
-          <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>
-        </div>
-        <div class="map-legend">
-          <span class="legend-dot" style="background:#e84040;"></span>Sanctioned/Critical
-          <span class="legend-dot" style="background:#f97316;"></span>High
-          <span class="legend-dot" style="background:#eab308;"></span>Medium
-          <span class="legend-dot" style="background:#475569;"></span>Clean
-        </div>
+      <div class="stat-card">
+        <div class="stat-label">OpenSanctions</div>
+        <div class="stat-value info" id="stat-opensanctions">—</div>
+        <div class="stat-sub">vessel entries</div>
       </div>
-
-      <!-- Map container -->
-      <div id="risk-map"></div>
-
+      <div class="stat-card">
+        <div class="stat-label">AIS Vessels</div>
+        <div class="stat-value" id="stat-ais-vessels">—</div>
+        <div class="stat-sub">tracked tankers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Dark Periods</div>
+        <div class="stat-value danger" id="stat-dark-periods">—</div>
+        <div class="stat-sub">AIS gap events</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">STS Events</div>
+        <div class="stat-value accent" id="stat-sts-events">—</div>
+        <div class="stat-sub">IND7 — transfers</div>
+      </div>
     </div>
-  </div>
 
-  <div class="two-col">
-
-    <!-- ── Sanctions Database ──────────────────────────── -->
-    <div class="panel" style="grid-column: 1 / -1;">
+    <!-- ── Vessel Screening ──────────────────────────── -->
+    <div class="panel">
       <div class="panel-header">
+        <span class="panel-title">Vessel Screening</span>
+        <span class="text-muted fs-70">IMO number · MMSI · vessel name</span>
+      </div>
+      <div class="panel-body">
+        <div class="screen-row">
+          <input
+            type="text"
+            id="screen-query"
+            class="screen-input"
+            placeholder="e.g.  9876543  ·  123456789  ·  SKIPPER  ·  IMO 9876543"
+            autocomplete="off"
+          >
+          <button class="btn btn-primary" id="screen-btn" onclick="runScreening()">SCREEN</button>
+        </div>
+        <div id="screen-result"></div>
+      </div>
+    </div>
+
+    <!-- ── Live Risk Map ─────────────────────────────── -->
+    <div class="panel" id="map-panel">
+      <div class="panel-header">
+        <span class="panel-title">Live Risk Map</span>
+        <span id="map-vessel-count" class="text-muted fs-72"></span>
+      </div>
+      <div class="panel-body" style="padding-bottom:.5rem;">
+
+        <!-- Controls bar -->
+        <div class="map-controls">
+          <div class="map-filter-group">
+            <button class="map-filter-btn"        data-filter="all"         onclick="setMapFilter(this)">All</button>
+            <button class="map-filter-btn active" data-filter="medium_plus" onclick="setMapFilter(this)">Medium+</button>
+            <button class="map-filter-btn"        data-filter="high_plus"   onclick="setMapFilter(this)">High+</button>
+            <button class="map-filter-btn"        data-filter="sanctioned"  onclick="setMapFilter(this)">Sanctioned</button>
+          </div>
+          <div class="flex-center gap-05">
+            <label class="map-overlay-toggle fs-72">
+              <input type="checkbox" id="map-openseamap" onchange="toggleOpenSeaMap(this.checked)">
+              OpenSeaMap
+            </label>
+            <button id="btn-clear-track" class="btn btn-secondary btn-sm" onclick="clearTrack()" disabled>No Active Track</button>
+            <button class="btn btn-secondary btn-sm" onclick="refreshMap()">↻ Refresh</button>
+          </div>
+          <div class="map-legend">
+            <span class="legend-dot" style="background:#e84040;"></span>Sanctioned/Critical
+            <span class="legend-dot" style="background:#f97316;"></span>High
+            <span class="legend-dot" style="background:#eab308;"></span>Medium
+            <span class="legend-dot" style="background:#475569;"></span>Clean
+          </div>
+        </div>
+
+        <!-- Map container -->
+        <div id="risk-map"></div>
+
+      </div>
+    </div>
+
+    <!-- ── Sanctions Database (collapsed by default) ─── -->
+    <div class="panel collapsed" id="panel-sanctions">
+      <div class="panel-header collapsible" onclick="togglePanel('panel-sanctions')">
         <span class="panel-title">Sanctions Database</span>
-        <span id="sanctions-count" class="text-muted" style="font-size:0.72rem;"></span>
+        <span id="sanctions-count" class="text-muted fs-72"></span>
+        <span class="panel-chevron">▾</span>
       </div>
 
       <div class="filter-bar">
@@ -170,279 +180,361 @@
       </div>
     </div>
 
-  </div><!-- .two-col -->
+    <!-- ── Dark Period Alerts (collapsed by default) ──── -->
+    <div class="panel collapsed" id="panel-dark-periods">
+      <div class="panel-header collapsible" onclick="togglePanel('panel-dark-periods')">
+        <span class="panel-title">Dark Period Alerts</span>
+        <span class="text-muted fs-70">Indicator 1 — AIS transponder off / spoofed</span>
+        <span class="panel-chevron">▾</span>
+      </div>
+      <div class="panel-body">
 
-  <!-- ── AIS Feed ────────────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">AIS Live Feed</span>
-      <span id="ais-status-badge" class="badge badge-muted">OFFLINE</span>
+        <div class="flex-center flex-wrap gap-05 mb-075">
+          <button class="btn btn-primary btn-sm" id="btn-detect-dark" onclick="runDarkDetect()">
+            Run Detection
+          </button>
+          <select id="dark-min-hours" class="filter-select" style="min-width:130px;">
+            <option value="2">≥ 2 h gap</option>
+            <option value="6">≥ 6 h gap</option>
+            <option value="24">≥ 24 h gap</option>
+          </select>
+          <select id="dark-risk-filter" class="filter-select" onchange="loadDarkPeriods()">
+            <option value="">All risk levels</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+          </select>
+          <span id="dark-detect-status" class="fs-78"></span>
+        </div>
+
+        <div class="table-wrapper" style="max-height:300px;">
+          <table id="dark-periods-table">
+            <thead>
+              <tr>
+                <th>Risk</th>
+                <th>MMSI</th>
+                <th>Vessel</th>
+                <th>Gap start</th>
+                <th>Hours</th>
+                <th>Distance km</th>
+                <th>Zone</th>
+                <th>⚑</th>
+              </tr>
+            </thead>
+            <tbody id="dark-periods-tbody">
+              <tr><td colspan="8" class="empty-state">No dark periods detected yet — run detection above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
     </div>
-    <div class="panel-body">
 
-      <div class="ingest-row" style="align-items:flex-start;">
-        <div class="ingest-card" style="flex:1;">
-          <h3>aisstream.io</h3>
-          <p>Real-time global tanker positions via WebSocket. Requires a free API key from
-            <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>.
-            Set <code>AISSTREAM_API_KEY</code> env var to auto-connect on start.</p>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-            <input type="text" id="ais-api-key" class="filter-input"
-              placeholder="API key (or set env var)" style="flex:1;min-width:200px;">
-            <button class="btn btn-primary btn-sm" id="btn-ais-start" onclick="aisStart()">Connect</button>
-            <button class="btn btn-secondary btn-sm" id="btn-ais-stop" onclick="aisStop()" disabled>Disconnect</button>
+    <!-- ── STS Transfer Events (collapsed by default) ─── -->
+    <div class="panel collapsed" id="panel-sts-events">
+      <div class="panel-header collapsible" onclick="togglePanel('panel-sts-events')">
+        <span class="panel-title">STS Transfer Events</span>
+        <span class="text-muted fs-70">Indicator 7 — Ship-to-ship transfer at sea</span>
+        <span class="panel-chevron">▾</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="flex-center flex-wrap gap-05 mb-075">
+          <button class="btn btn-primary btn-sm" id="btn-sts-detect" onclick="runStsDetect()">
+            Run Detection
+          </button>
+          <select id="sts-hours-back" class="filter-select" style="min-width:120px;">
+            <option value="24">Last 24 h</option>
+            <option value="48" selected>Last 48 h</option>
+            <option value="168">Last 7 days</option>
+          </select>
+          <select id="sts-risk-filter" class="filter-select" onchange="loadStsEvents()">
+            <option value="">All risk levels</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+          </select>
+          <label class="fs-72" style="margin-left:.25rem;">
+            <input type="checkbox" id="sts-sanctions-only" onchange="loadStsEvents()"> Sanctioned pair only
+          </label>
+          <span id="sts-detect-status" class="fs-78"></span>
+        </div>
+
+        <div class="table-wrapper" style="max-height:320px;">
+          <table id="sts-events-table">
+            <thead>
+              <tr>
+                <th>Risk</th>
+                <th>Vessel 1</th>
+                <th>MMSI 1</th>
+                <th>Vessel 2</th>
+                <th>MMSI 2</th>
+                <th>Time (UTC)</th>
+                <th>Dist m</th>
+                <th>SOG 1</th>
+                <th>SOG 2</th>
+                <th>Zone</th>
+                <th>⚑</th>
+              </tr>
+            </thead>
+            <tbody id="sts-events-tbody">
+              <tr><td colspan="11" class="empty-state">No STS events detected yet — run detection above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- #tab-intel -->
+
+  <!-- ══════════════════════════════════════════════════ -->
+  <!--  System tab                                         -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div id="tab-sys" class="tab-pane">
+
+    <!-- ── AIS Live Feed ──────────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">AIS Live Feed</span>
+        <span id="ais-status-badge" class="badge badge-muted">OFFLINE</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="ingest-row" style="align-items:flex-start;">
+          <div class="ingest-card" style="flex:1;">
+            <h3>aisstream.io</h3>
+            <p>Real-time global tanker positions via WebSocket. Requires a free API key from
+              <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>.
+              Set <code>AISSTREAM_API_KEY</code> env var to auto-connect on start.</p>
+            <div class="flex flex-wrap gap-05 mt-05">
+              <input type="text" id="ais-api-key" class="filter-input"
+                placeholder="API key (or set env var)" style="flex:1;min-width:200px;">
+              <button class="btn btn-primary btn-sm" id="btn-ais-start" onclick="aisStart()">Connect</button>
+              <button class="btn btn-secondary btn-sm" id="btn-ais-stop" onclick="aisStop()" disabled>Disconnect</button>
+            </div>
+          </div>
+          <div class="stat-card" style="min-width:140px;flex:0;">
+            <div class="stat-label">Msgs / min</div>
+            <div class="stat-value" id="ais-msg-rate">—</div>
+            <div class="stat-sub" id="ais-total-msgs">0 total</div>
           </div>
         </div>
-        <div class="stat-card" style="min-width:140px;flex:0;">
-          <div class="stat-label">Msgs / min</div>
-          <div class="stat-value" id="ais-msg-rate">—</div>
-          <div class="stat-sub" id="ais-total-msgs">0 total</div>
+
+        <!-- Vessel roster sub-section (collapsed by default) -->
+        <div class="panel-sub-header" onclick="toggleAisRoster()">
+          <span class="fs-72 text-muted">Tracked tankers</span>
+          <button class="btn btn-secondary btn-sm" style="padding:.1rem .5rem;"
+            onclick="event.stopPropagation();loadAisVessels()">↻ Refresh</button>
+          <label class="fs-72" style="margin-left:.25rem;" onclick="event.stopPropagation()">
+            <input type="checkbox" id="ais-sanctioned-only" onchange="loadAisVessels()"> Sanctioned only
+          </label>
+          <span id="ais-roster-chevron" class="panel-chevron rotated">▾</span>
         </div>
-      </div>
+        <div id="ais-roster-body" class="collapsed">
+          <div class="table-wrapper" style="max-height:260px;">
+            <table id="ais-vessels-table">
+              <thead>
+                <tr>
+                  <th>MMSI</th>
+                  <th>Name</th>
+                  <th>IMO</th>
+                  <th>Lat</th>
+                  <th>Lon</th>
+                  <th>SOG</th>
+                  <th>Last seen</th>
+                  <th>⚑</th>
+                </tr>
+              </thead>
+              <tbody id="ais-vessels-tbody">
+                <tr><td colspan="8" class="empty-state">No AIS vessels yet — connect the feed or load NOAA data.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <!-- Live vessel table -->
-      <div style="font-size:.72rem;color:var(--muted);margin:.75rem 0 .3rem;">Tracked tankers
-        <button class="btn btn-secondary btn-sm" style="margin-left:.5rem;padding:.1rem .5rem;"
-          onclick="loadAisVessels()">↻ Refresh</button>
-        <label style="margin-left:.75rem;font-size:.72rem;">
-          <input type="checkbox" id="ais-sanctioned-only" onchange="loadAisVessels()"> Sanctioned only
-        </label>
-      </div>
-      <div class="table-wrapper" style="max-height:260px;">
-        <table id="ais-vessels-table">
-          <thead>
-            <tr>
-              <th>MMSI</th>
-              <th>Name</th>
-              <th>IMO</th>
-              <th>Lat</th>
-              <th>Lon</th>
-              <th>SOG</th>
-              <th>Last seen</th>
-              <th>⚑</th>
-            </tr>
-          </thead>
-          <tbody id="ais-vessels-tbody">
-            <tr><td colspan="8" class="empty-state">No AIS vessels yet — connect the feed or load NOAA data.</td></tr>
-          </tbody>
-        </table>
       </div>
     </div>
-  </div>
 
-  <!-- ── Dark Periods ──────────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">Dark Period Alerts</span>
-      <span class="text-muted" style="font-size:.7rem;">Indicator 1 — AIS transponder off / spoofed</span>
-    </div>
-    <div class="panel-body">
-
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
-        <button class="btn btn-primary btn-sm" id="btn-detect-dark" onclick="runDarkDetect()">
-          Run Detection
-        </button>
-        <select id="dark-min-hours" class="filter-select" style="min-width:130px;">
-          <option value="2">≥ 2 h gap</option>
-          <option value="6">≥ 6 h gap</option>
-          <option value="24">≥ 24 h gap</option>
-        </select>
-        <select id="dark-risk-filter" class="filter-select" onchange="loadDarkPeriods()">
-          <option value="">All risk levels</option>
-          <option value="CRITICAL">CRITICAL</option>
-          <option value="HIGH">HIGH</option>
-          <option value="MEDIUM">MEDIUM</option>
-          <option value="LOW">LOW</option>
-        </select>
-        <span id="dark-detect-status" style="font-size:.78rem;"></span>
+    <!-- ── AIS Speed Anomalies ─────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">AIS Speed Anomaly Detection</span>
+        <span class="text-muted fs-70">Indicator 10 — GPS spoofing proxy (implied speed &gt; 50 kt)</span>
       </div>
+      <div class="panel-body">
 
-      <div class="table-wrapper" style="max-height:300px;">
-        <table id="dark-periods-table">
-          <thead>
-            <tr>
-              <th>Risk</th>
-              <th>MMSI</th>
-              <th>Vessel</th>
-              <th>Gap start</th>
-              <th>Hours</th>
-              <th>Distance km</th>
-              <th>Zone</th>
-              <th>⚑</th>
-            </tr>
-          </thead>
-          <tbody id="dark-periods-tbody">
-            <tr><td colspan="8" class="empty-state">No dark periods detected yet — run detection above.</td></tr>
-          </tbody>
-        </table>
+        <div class="flex-center flex-wrap gap-05 mb-075">
+          <button class="btn btn-primary btn-sm" id="btn-anomaly-detect" onclick="runAnomalyDetect()">
+            Detect Anomalies
+          </button>
+          <select id="anomaly-hours-back" class="filter-select" style="min-width:120px;">
+            <option value="48">Last 48 h</option>
+            <option value="168" selected>Last 7 days</option>
+            <option value="336">Last 14 days</option>
+          </select>
+          <span id="anomaly-detect-status" class="fs-78"></span>
+        </div>
+
+        <p class="text-muted fs-72" style="margin:0 0 .25rem;">
+          Scans consecutive AIS position pairs. Any pair implying &gt;50 kt is recorded as an IND10
+          anomaly and factored into the vessel risk score on next screening.
+        </p>
+
       </div>
-
     </div>
-  </div>
 
-  <!-- ── STS Transfer Events ──────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">STS Transfer Events</span>
-      <span class="text-muted" style="font-size:.7rem;">Indicator 7 — Ship-to-ship transfer at sea</span>
-    </div>
-    <div class="panel-body">
-
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
-        <button class="btn btn-primary btn-sm" id="btn-sts-detect" onclick="runStsDetect()">
-          Run Detection
-        </button>
-        <select id="sts-hours-back" class="filter-select" style="min-width:120px;">
-          <option value="24">Last 24 h</option>
-          <option value="48" selected>Last 48 h</option>
-          <option value="168">Last 7 days</option>
-        </select>
-        <select id="sts-risk-filter" class="filter-select" onchange="loadStsEvents()">
-          <option value="">All risk levels</option>
-          <option value="CRITICAL">CRITICAL</option>
-          <option value="HIGH">HIGH</option>
-          <option value="MEDIUM">MEDIUM</option>
-          <option value="LOW">LOW</option>
-        </select>
-        <label style="font-size:.72rem;margin-left:.25rem;">
-          <input type="checkbox" id="sts-sanctions-only" onchange="loadStsEvents()"> Sanctioned pair only
-        </label>
-        <span id="sts-detect-status" style="font-size:.78rem;"></span>
+    <!-- ── Loitering Detection ────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Open-Water Loitering Detection</span>
+        <span class="text-muted fs-70">Indicator 9 — Stationary ≥ 12 h outside anchorage</span>
       </div>
+      <div class="panel-body">
 
-      <div class="table-wrapper" style="max-height:320px;">
-        <table id="sts-events-table">
-          <thead>
-            <tr>
-              <th>Risk</th>
-              <th>Vessel 1</th>
-              <th>MMSI 1</th>
-              <th>Vessel 2</th>
-              <th>MMSI 2</th>
-              <th>Time (UTC)</th>
-              <th>Dist m</th>
-              <th>SOG 1</th>
-              <th>SOG 2</th>
-              <th>Zone</th>
-              <th>⚑</th>
-            </tr>
-          </thead>
-          <tbody id="sts-events-tbody">
-            <tr><td colspan="11" class="empty-state">No STS events detected yet — run detection above.</td></tr>
-          </tbody>
-        </table>
+        <div class="flex-center flex-wrap gap-05 mb-075">
+          <button class="btn btn-primary btn-sm" id="btn-loiter-detect" onclick="runLoiteringDetect()">
+            Detect Loitering
+          </button>
+          <select id="loiter-hours-back" class="filter-select" style="min-width:120px;">
+            <option value="48">Last 48 h</option>
+            <option value="168" selected>Last 7 days</option>
+            <option value="336">Last 14 days</option>
+          </select>
+          <span id="loiter-detect-status" class="fs-78"></span>
+        </div>
+
+        <p class="text-muted fs-72" style="margin:0 0 .25rem;">
+          Groups consecutive AIS positions with SOG &lt; 2 kt into episodes. Episodes ≥ 12 h are recorded
+          as IND9 loitering events. Risk levels: MEDIUM ≥ 12 h · HIGH ≥ 24 h or in a high-risk zone · CRITICAL ≥ 48 h.
+        </p>
+
       </div>
-
     </div>
-  </div>
 
-  <!-- ── AIS Speed Anomalies ──────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">AIS Speed Anomaly Detection</span>
-      <span class="text-muted" style="font-size:.7rem;">Indicator 10 — GPS spoofing proxy (implied speed &gt; 50 kt)</span>
-    </div>
-    <div class="panel-body">
-
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;">
-        <button class="btn btn-primary btn-sm" id="btn-anomaly-detect" onclick="runAnomalyDetect()">
-          Detect Anomalies
-        </button>
-        <select id="anomaly-hours-back" class="filter-select" style="min-width:120px;">
-          <option value="48">Last 48 h</option>
-          <option value="168" selected>Last 7 days</option>
-          <option value="336">Last 14 days</option>
-        </select>
-        <span id="anomaly-detect-status" style="font-size:.78rem;"></span>
+    <!-- ── Sanctioned Port Calls ──────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Sanctioned Port Call Detection</span>
+        <span class="text-muted fs-70">Indicator 29 — Vessel at sanctioned terminal (Iran · Russia · DPRK · Syria · Venezuela)</span>
       </div>
+      <div class="panel-body">
 
-      <p class="text-muted" style="font-size:.72rem;margin:0 0 .25rem;">
-        Scans consecutive AIS position pairs. Any pair implying &gt;50 kt is recorded as an IND10
-        anomaly and factored into the vessel risk score on next screening.
-      </p>
+        <div class="flex-center flex-wrap gap-05 mb-075">
+          <button class="btn btn-primary btn-sm" id="btn-port-detect" onclick="runPortCallDetect()">
+            Detect Port Calls
+          </button>
+          <select id="port-hours-back" class="filter-select" style="min-width:130px;">
+            <option value="720" selected>Last 30 days</option>
+            <option value="1440">Last 60 days</option>
+            <option value="2160">Last 90 days</option>
+          </select>
+          <span id="port-detect-status" class="fs-78"></span>
+        </div>
 
+        <p class="text-muted fs-72" style="margin:0 0 .25rem;">
+          Geofences AIS positions against ~30 sanctioned terminals. Consecutive in-port positions are
+          collapsed into a single visit record. Matched visits add IND29 weight to the vessel risk score.
+        </p>
+
+      </div>
     </div>
-  </div>
 
-  <!-- ── NOAA Historical AIS ───────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">NOAA Historical AIS</span>
-      <span class="text-muted" style="font-size:.7rem;">Marine Cadastre — bulk monthly CSV</span>
+    <!-- ── NOAA Historical AIS ────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">NOAA Historical AIS</span>
+        <span class="text-muted fs-70">Marine Cadastre — bulk monthly CSV</span>
+      </div>
+      <div class="panel-body">
+        <div class="ingest-row">
+          <div class="ingest-card" style="flex:2;">
+            <h3>Marine Cadastre Bulk Load</h3>
+            <p>Downloads a monthly AIS ZIP from NOAA and bulk-inserts tanker positions.
+               Zone 10 = Gulf of Mexico (~200 MB). Good for dark-period baseline testing.</p>
+            <div class="flex-center flex-wrap gap-05 mt-05">
+              <input type="number" id="noaa-year"  class="filter-input" value="2024" min="2015" max="2025" style="width:70px;">
+              <select id="noaa-month" class="filter-select" style="min-width:90px;">
+                <option value="1">Jan</option><option value="2">Feb</option>
+                <option value="3">Mar</option><option value="4">Apr</option>
+                <option value="5">May</option><option value="6" selected>Jun</option>
+                <option value="7">Jul</option><option value="8">Aug</option>
+                <option value="9">Sep</option><option value="10">Oct</option>
+                <option value="11">Nov</option><option value="12">Dec</option>
+              </select>
+              <select id="noaa-zone" class="filter-select" style="min-width:90px;">
+                <option value="10" selected>Zone 10</option>
+                <option value="11">Zone 11</option>
+                <option value="14">Zone 14</option>
+                <option value="17">Zone 17</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btn-noaa-ingest" onclick="runNoaaIngest()">
+                Load NOAA CSV
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="noaa-status" class="fs-78 mt-05"></div>
+      </div>
     </div>
-    <div class="panel-body">
-      <div class="ingest-row">
-        <div class="ingest-card" style="flex:2;">
-          <h3>Marine Cadastre Bulk Load</h3>
-          <p>Downloads a monthly AIS ZIP from NOAA and bulk-inserts tanker positions.
-             Zone 10 = Gulf of Mexico (~200 MB). Good for dark-period baseline testing.</p>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;align-items:center;">
-            <input type="number" id="noaa-year"  class="filter-input" value="2024" min="2015" max="2025" style="width:70px;">
-            <select id="noaa-month" class="filter-select" style="min-width:90px;">
-              <option value="1">Jan</option><option value="2">Feb</option>
-              <option value="3">Mar</option><option value="4">Apr</option>
-              <option value="5">May</option><option value="6" selected>Jun</option>
-              <option value="7">Jul</option><option value="8">Aug</option>
-              <option value="9">Sep</option><option value="10">Oct</option>
-              <option value="11">Nov</option><option value="12">Dec</option>
-            </select>
-            <select id="noaa-zone" class="filter-select" style="min-width:90px;">
-              <option value="10" selected>Zone 10</option>
-              <option value="11">Zone 11</option>
-              <option value="14">Zone 14</option>
-              <option value="17">Zone 17</option>
-            </select>
-            <button class="btn btn-secondary btn-sm" id="btn-noaa-ingest" onclick="runNoaaIngest()">
-              Load NOAA CSV
+
+    <!-- ── Data Ingestion ──────────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Data Ingestion</span>
+        <span class="text-muted fs-70">Free, no API keys required</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="ingest-row">
+          <div class="ingest-card">
+            <h3>OFAC SDN List</h3>
+            <p>U.S. Treasury Specially Designated Nationals. Direct XML download — vessel, individual &amp; entity entries.</p>
+            <button class="btn btn-primary btn-sm" id="btn-ingest-ofac" onclick="runIngest('ofac')">
+              Fetch OFAC SDN
             </button>
           </div>
+          <div class="ingest-card">
+            <h3>OpenSanctions</h3>
+            <p>Consolidated multi-jurisdiction vessel sanctions. CC BY-SA 4.0. Streams from OpenSanctions API — vessel schema only.</p>
+            <button class="btn btn-secondary btn-sm" id="btn-ingest-opensanctions" onclick="runIngest('opensanctions')">
+              Fetch OpenSanctions
+            </button>
+          </div>
+          <div class="ingest-card">
+            <h3>Reconcile</h3>
+            <p>Merge duplicate canonical records after a fresh ingest. Detects IMO collisions (Tier 1) and MMSI→IMO overlaps (Tier 2). Run after both sources are loaded.</p>
+            <button class="btn btn-secondary btn-sm" id="btn-reconcile" onclick="runReconcile()">
+              Reconcile
+            </button>
+            <div id="reconcile-status" class="fs-78 mt-05"></div>
+          </div>
+          <div class="ingest-card">
+            <h3>PSC Detentions <span class="text-muted fs-70">(IND31)</span></h3>
+            <p>Paris MOU and Tokyo MOU public detention lists. IMO-keyed records from the last 24 months are scored against screened vessels (+10 pts/detention, cap 20).</p>
+            <div class="flex-center flex-wrap gap-05">
+              <button class="btn btn-secondary btn-sm" id="btn-ingest-psc-paris" onclick="runPscIngest('paris')">
+                Fetch Paris MOU
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-ingest-psc-tokyo" onclick="runPscIngest('tokyo')">
+                Fetch Tokyo MOU
+              </button>
+            </div>
+          </div>
         </div>
+
+        <div id="ingest-status" class="fs-78 mb-075"></div>
+
+        <div class="fs-72 text-muted" style="margin-bottom:0.4rem;">Recent ingests</div>
+        <ul class="ingest-log-list" id="ingest-log-list">
+          <li><span>—</span></li>
+        </ul>
       </div>
-      <div id="noaa-status" style="font-size:.78rem;margin-top:.5rem;"></div>
     </div>
-  </div>
 
-  <!-- ── Data Ingestion ──────────────────────────────── -->
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">Data Ingestion</span>
-      <span class="text-muted" style="font-size:0.7rem;">Free, no API keys required</span>
-    </div>
-    <div class="panel-body">
-
-      <div class="ingest-row">
-        <div class="ingest-card">
-          <h3>OFAC SDN List</h3>
-          <p>U.S. Treasury Specially Designated Nationals. Direct XML download — vessel, individual &amp; entity entries.</p>
-          <button class="btn btn-primary btn-sm" id="btn-ingest-ofac" onclick="runIngest('ofac')">
-            Fetch OFAC SDN
-          </button>
-        </div>
-        <div class="ingest-card">
-          <h3>OpenSanctions</h3>
-          <p>Consolidated multi-jurisdiction vessel sanctions. CC BY-SA 4.0. Streams from OpenSanctions API — vessel schema only.</p>
-          <button class="btn btn-secondary btn-sm" id="btn-ingest-opensanctions" onclick="runIngest('opensanctions')">
-            Fetch OpenSanctions
-          </button>
-        </div>
-        <div class="ingest-card">
-          <h3>Reconcile</h3>
-          <p>Merge duplicate canonical records after a fresh ingest. Detects IMO collisions (Tier 1) and MMSI→IMO overlaps (Tier 2). Run after both sources are loaded.</p>
-          <button class="btn btn-secondary btn-sm" id="btn-reconcile" onclick="runReconcile()">
-            Reconcile
-          </button>
-          <div id="reconcile-status" style="font-size:.78rem;margin-top:.5rem;"></div>
-        </div>
-      </div>
-
-      <div id="ingest-status" style="font-size:0.78rem;margin-bottom:0.75rem;"></div>
-
-      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.4rem;">Recent ingests</div>
-      <ul class="ingest-log-list" id="ingest-log-list">
-        <li><span>—</span></li>
-      </ul>
-    </div>
-  </div>
+  </div><!-- #tab-sys -->
 
 </main>
 

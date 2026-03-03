@@ -6,10 +6,13 @@ Session 1 sources:
   - OpenSanctions  (CC BY-SA 4.0, free bulk download)
 """
 
+import csv
 import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from io import StringIO
 from typing import Generator
 
 import requests
@@ -289,3 +292,145 @@ def fetch_opensanctions_vessels() -> list[dict]:
         total_lines, len(entries),
     )
     return entries
+
+
+# ── PSC Detention Lists (IND31) ────────────────────────────────────────────
+
+# Public CSV endpoints — update if the MOU changes their download URL.
+# Paris MOU: monthly updated detention list (free, no auth)
+# Tokyo MOU: equivalent Pacific-region list
+PSC_SOURCES: dict[str, dict] = {
+    "paris": {
+        "url":       "https://www.parismou.org/sites/default/files/Paris%20MOU%20Detention%20List.csv",
+        "authority": "Paris MOU",
+    },
+    "tokyo": {
+        "url":       "https://www.tokyo-mou.org/doc/DetentionList.csv",
+        "authority": "Tokyo MOU",
+    },
+}
+
+# Expected CSV column name aliases (lower-cased, stripped) → canonical key
+_PSC_COL_MAP: dict[str, str] = {
+    # IMO
+    "imo number": "imo", "imo no": "imo", "imo no.": "imo", "imo": "imo",
+    # Vessel name
+    "ship name": "vessel_name", "vessel name": "vessel_name", "name": "vessel_name",
+    # Flag
+    "flag": "flag_state", "flag state": "flag_state",
+    # Dates
+    "date detained":     "detention_date",
+    "detention date":    "detention_date",
+    "date of detention": "detention_date",
+    "date released":     "release_date",
+    "release date":      "release_date",
+    "date released/still detained": "release_date",
+    # Port
+    "port":         "port_name",
+    "port/state":   "port_name",
+    "port of detention": "port_name",
+    # Country
+    "country":       "port_country",
+    "port country":  "port_country",
+    # Deficiencies
+    "no. of deficiencies": "deficiency_count",
+    "deficiencies":        "deficiency_count",
+    "number of deficiencies": "deficiency_count",
+    "no of deficiencies":     "deficiency_count",
+}
+
+# Date formats tried in order when parsing PSC CSV date fields
+_PSC_DATE_FMTS = ("%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d %b %Y", "%B %d, %Y")
+
+
+def _parse_psc_date(raw: str | None) -> str | None:
+    """Parse a PSC CSV date string to ISO YYYY-MM-DD, or None if unparseable."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    for fmt in _PSC_DATE_FMTS:
+        try:
+            return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_psc_int(raw: str | None) -> int | None:
+    """Return integer value of a PSC field, or None."""
+    if not raw:
+        return None
+    try:
+        return int(str(raw).strip().split()[0])  # handle "5 (2 class)" etc.
+    except (ValueError, IndexError):
+        return None
+
+
+def fetch_psc_detentions(source: str = "paris") -> list[dict]:
+    """
+    Download and parse a Paris MOU or Tokyo MOU PSC detention list CSV.
+
+    source: "paris" or "tokyo"
+
+    Returns a list of dicts suitable for db.upsert_psc_detentions():
+      imo_number, vessel_name, flag_state, detention_date, release_date,
+      port_name, port_country, authority, deficiency_count, list_source
+
+    CSV column names are normalised so minor formatting variations are handled.
+    Rows without a valid 7-digit IMO number are silently skipped.
+
+    The Paris MOU URL is public and requires no authentication:
+      https://www.parismou.org/sites/default/files/Paris%20MOU%20Detention%20List.csv
+    Update PSC_SOURCES if the download URL changes.
+    """
+    cfg = PSC_SOURCES.get(source)
+    if not cfg:
+        raise ValueError(f"Unknown PSC source '{source}'. Choose 'paris' or 'tokyo'.")
+
+    url       = cfg["url"]
+    authority = cfg["authority"]
+    logger.info("Downloading PSC detention list from %s", url)
+
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+
+    # Detect encoding — Paris MOU often uses latin-1
+    encoding = resp.encoding or "utf-8"
+    try:
+        text = resp.content.decode(encoding)
+    except (UnicodeDecodeError, LookupError):
+        text = resp.content.decode("latin-1", errors="replace")
+
+    reader  = csv.DictReader(StringIO(text))
+    records = []
+
+    for row in reader:
+        # Normalise all column names
+        norm: dict[str, str] = {}
+        for k, v in row.items():
+            if k:
+                mapped = _PSC_COL_MAP.get(k.lower().strip())
+                if mapped:
+                    norm[mapped] = (v or "").strip()
+
+        # Require a valid 7-digit IMO
+        imo_raw = norm.get("imo", "")
+        imo     = re.sub(r"\D", "", imo_raw)
+        if len(imo) != 7:
+            continue
+
+        records.append({
+            "imo_number":       imo,
+            "vessel_name":      norm.get("vessel_name"),
+            "flag_state":       norm.get("flag_state"),
+            "detention_date":   _parse_psc_date(norm.get("detention_date")),
+            "release_date":     _parse_psc_date(norm.get("release_date")),
+            "port_name":        norm.get("port_name"),
+            "port_country":     norm.get("port_country"),
+            "authority":        authority,
+            "deficiency_count": _parse_psc_int(norm.get("deficiency_count")),
+            "list_source":      source,
+        })
+
+    logger.info("Parsed %d PSC detention records from %s", len(records), authority)
+    return records
