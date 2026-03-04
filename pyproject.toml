@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Maritime OSINT platform for sanctions screening and AIS tracking"
 requires-python = ">=3.11"
 dependencies = [
+    "pydantic>=2.0",
     "requests>=2.28.0",
     "python-dotenv>=1.0.0",
     "flask>=3.1.0",
