@@ -136,8 +136,8 @@ Based on dependencies and risk:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DB-3 | Phase 1 — Database Decomposition | Complete |
-| INF-3 | Phase 1 — Database Decomposition | Pending |
-| INF-4 | Phase 1 — Database Decomposition | Pending |
+| INF-3 | Phase 1 — Database Decomposition | Complete |
+| INF-4 | Phase 1 — Database Decomposition | Complete |
 | DB-1 | Phase 2 — Pre-Computed Risk Scores | Pending |
 | DB-2 | Phase 2 — Pre-Computed Risk Scores | Pending |
 | DB-4 | Phase 2 — Pre-Computed Risk Scores | Pending |
