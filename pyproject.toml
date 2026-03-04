@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Maritime OSINT platform for sanctions screening and AIS tracking"
 requires-python = ">=3.11"
 dependencies = [
+    "pydantic>=2.0",
     "requests>=2.28.0",
     "python-dotenv>=1.0.0",
     "flask>=3.1.0",
@@ -12,6 +13,12 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "lxml>=5.0.0",
     "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "types-requests",
 ]
 
 [tool.ruff]
@@ -49,6 +56,42 @@ ignore = [
     "S314",   # xml vulnerability (using standard library xml)
     "S104",   # Binding to all interfaces (common in dev apps)
 ]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+
+# Start with these — tighten later
+warn_return_any = true
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+# Exclude files not in scope for this sprint
+exclude = [
+    "db\\.py",
+    "app\\.py",
+    "ingest\\.py",
+    "normalize\\.py",
+    "ais_listener\\.py",
+    "noaa_ingest\\.py",
+    "reconcile\\.py",
+    "spoofing\\.py",
+    "map_data\\.py",
+    "risk_config\\.py",
+]
+
+# Tell mypy not to follow imports into excluded modules
+[[tool.mypy.overrides]]
+module = [
+    "db",
+    "normalize",
+    "psycopg2.*",
+    "lxml.*",
+    "websockets.*",
+]
+ignore_missing_imports = true
+follow_imports = "silent"
 
 [tool.ruff.lint.mccabe]
 max-complexity = 20

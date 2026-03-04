@@ -17,9 +17,10 @@ Shadow Fleet indicators addressed
 IND7 — Ship-to-ship transfer at sea (both vessels slow, close proximity)
 """
 
-import math
 import logging
+import math
 from datetime import datetime
+from typing import Any
 
 import db
 import schemas
@@ -51,12 +52,12 @@ _ZONES = [
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in km."""
-    R = 6371.0
+    r = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return R * 2 * math.asin(math.sqrt(min(a, 1.0)))
+    return r * 2 * math.asin(math.sqrt(min(a, 1.0)))
 
 
 def _classify_zone(lat: float, lon: float) -> str | None:
@@ -89,7 +90,7 @@ def _risk_level(
     return "LOW"
 
 
-def _ts_to_epoch(ts) -> float:
+def _ts_to_epoch(ts: Any) -> float:
     """Convert timestamp string or datetime to epoch seconds."""
     if isinstance(ts, (int, float)):
         return float(ts)
@@ -103,22 +104,23 @@ def _ts_to_epoch(ts) -> float:
         return 0.0
 
 
-def _deduplicate(events: list[dict]) -> list[dict]:
+def _deduplicate(events: list[schemas.StsEvent]) -> list[schemas.StsEvent]:
     """
     Collapse same-pair events within DEDUP_HOURS into a single representative
     event (the one with the smallest distance).
     """
     threshold = DEDUP_HOURS * 3600  # seconds
-    kept: list[dict] = []
+    kept: list[schemas.StsEvent] = []
 
-    for ev in sorted(events, key=lambda e: e["distance_km"]):
-        ev_ts = _ts_to_epoch(ev["event_ts"])
-        pair = tuple(sorted([ev["mmsi1"], ev["mmsi2"]]))
+    # Sort by distance_m (StsEvent has distance_m)
+    for ev in sorted(events, key=lambda e: e.distance_m or 0):
+        ev_ts = _ts_to_epoch(ev.event_ts)
+        pair = tuple(sorted([ev.mmsi1, ev.mmsi2]))
 
         duplicate = False
         for k in kept:
-            if tuple(sorted([k["mmsi1"], k["mmsi2"]])) == pair:
-                if abs(_ts_to_epoch(k["event_ts"]) - ev_ts) <= threshold:
+            if (tuple(sorted([k.mmsi1, k.mmsi2])) == pair and
+                abs(_ts_to_epoch(k.event_ts) - ev_ts) <= threshold):
                     duplicate = True
                     break
         if not duplicate:
@@ -133,10 +135,10 @@ def run_detection(
     hours_back: int = DEFAULT_HOURS_BACK,
     max_distance_km: float = STS_DISTANCE_KM,
     max_sog: float = MAX_SOG,
-) -> list[dict]:
+) -> list[schemas.StsEvent]:
     """
     Scan recent AIS positions for STS rendezvous candidates.
-    Returns list of event dicts; also persists them to sts_events table.
+    Returns list of StsEvent instances; also persists them to sts_events table.
     """
     # Step 1 — bounding-box candidates from DB
     raw = db.find_sts_candidates(
@@ -144,62 +146,69 @@ def run_detection(
         max_sog=max_sog,
     )
 
-    events: list[dict] = []
+    events: list[schemas.StsEvent] = []
 
     for c in raw:
-        lat1, lon1 = c.get("lat1"), c.get("lon1")
-        lat2, lon2 = c.get("lat2"), c.get("lon2")
+        # Cast raw DB values to float/str early for mypy
+        lat1 = c.get("lat1")
+        lon1 = c.get("lon1")
+        lat2 = c.get("lat2")
+        lon2 = c.get("lon2")
 
         # Skip if coordinates missing
-        if None in (lat1, lon1, lat2, lon2):
+        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
             continue
 
         # Step 2 — exact Haversine check
-        dist_km = _haversine(lat1, lon1, lat2, lon2)
+        dist_km = _haversine(float(lat1), float(lon1), float(lat2), float(lon2))
         if dist_km > max_distance_km:
             continue
 
         # Step 3 — at least one vessel slow
         sog1 = c.get("sog1")
         sog2 = c.get("sog2")
-        if sog1 is not None and sog2 is not None:
-            if sog1 > max_sog and sog2 > max_sog:
+        f_sog1 = float(sog1) if sog1 is not None else None
+        f_sog2 = float(sog2) if sog2 is not None else None
+
+        if (f_sog1 is not None and f_sog2 is not None and
+            f_sog1 > max_sog and f_sog2 > max_sog):
                 continue
 
         # Mid-point for zone lookup
-        mid_lat = (lat1 + lat2) / 2.0
-        mid_lon = (lon1 + lon2) / 2.0
+        mid_lat = (float(lat1) + float(lat2)) / 2.0
+        mid_lon = (float(lon1) + float(lon2)) / 2.0
         zone = _classify_zone(mid_lat, mid_lon)
 
         # Step 4 — sanctions cross-check (cached single-shot query)
-        mmsi1, mmsi2 = c["mmsi1"], c["mmsi2"]
+        mmsi1, mmsi2 = str(c["mmsi1"]), str(c["mmsi2"])
         sanc1 = bool(db.search_sanctions_by_mmsi(mmsi1))
         sanc2 = bool(db.search_sanctions_by_mmsi(mmsi2))
         sanctions_hit = sanc1 or sanc2
 
-        risk = _risk_level(dist_km, sanctions_hit, zone, sog1, sog2)
+        risk = _risk_level(dist_km, sanctions_hit, zone, f_sog1, f_sog2)
 
         try:
+            ev_ts = c.get("ts")
+            if not ev_ts:
+                continue
+
             ev = schemas.StsEvent(
                 mmsi1=mmsi1,
                 mmsi2=mmsi2,
                 vessel_name1=c.get("vessel_name1"),
                 vessel_name2=c.get("vessel_name2"),
-                event_ts=c.get("ts"),
+                event_ts=ev_ts,
                 lat=mid_lat,
                 lon=mid_lon,
                 distance_m=dist_km * 1000,
-                sog1=sog1,
-                sog2=sog2,
+                sog1=f_sog1,
+                sog2=f_sog2,
                 risk_zone=zone,
                 risk_level=risk,
                 sanctions_hit=sanctions_hit,
                 indicator_code="IND7",
             )
-            # We need distance_km for the deduplication step in _deduplicate
-            event_dict = ev.model_dump()
-            event_dict["distance_km"] = dist_km
-            events.append(event_dict)
+            events.append(ev)
         except Exception as e:
             logger.debug("Validation failed for STS event %s-%s: %s", mmsi1, mmsi2, e)
 
@@ -207,14 +216,14 @@ def run_detection(
     events = _deduplicate(events)
 
     # Step 6 — persist
-    db.upsert_sts_events(events)
+    db.upsert_sts_events([e.model_dump() for e in events])
 
     return events
 
 
-def summarise(events: list[dict]) -> dict:
+def summarise(events: list[schemas.StsEvent]) -> dict:
     counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for ev in events:
-        lvl = ev.get("risk_level", "LOW")
+        lvl = ev.risk_level
         counts[lvl] = counts.get(lvl, 0) + 1
     return counts
