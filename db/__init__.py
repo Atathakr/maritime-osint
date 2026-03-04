@@ -49,13 +49,13 @@ from .sanctions import (  # noqa: F401
 )
 
 # ── AIS CRUD ──────────────────────────────────────────────────────────────────
-# PLAN 01-02 step 4: uncomment after extracting ais.py
-# from .ais import (  # noqa: F401
-#     insert_ais_positions, upsert_ais_vessel, update_ais_vessel_position,
-#     get_ais_vessels, get_recent_positions, find_ais_gaps,
-#     get_consecutive_ais_pairs, get_ais_positions, get_active_mmsis,
-#     get_vessel_track, find_sts_candidates,
-# )
+# Extracted: plan 01-02 step 4
+from .ais import (  # noqa: F401
+    insert_ais_positions, upsert_ais_vessel, update_ais_vessel_position,
+    get_ais_vessels, get_recent_positions, find_ais_gaps,
+    get_consecutive_ais_pairs, get_ais_positions, get_active_mmsis,
+    get_vessel_track, find_sts_candidates,
+)
 
 # ── Findings / detection results ──────────────────────────────────────────────
 # PLAN 01-02 step 5: uncomment after extracting findings.py
