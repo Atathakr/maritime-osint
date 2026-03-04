@@ -1,7 +1,21 @@
 """Flask application — Maritime OSINT Platform (Sessions 1–4: Sanctions + AIS + Reconciliation)."""
 
 import os
-import secrets
+import sys
+
+# ── Startup enforcement — must run before any heavy imports ──────────────────
+# These checks run before load_dotenv() so that a .env file cannot mask a
+# missing env var in a production deployment (e.g. Railway, Docker).
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    print("[maritime-osint] SECRET_KEY is required. Set it in your environment or .env file. See .env.example.")
+    sys.exit(1)
+_app_password = os.environ.get("APP_PASSWORD")
+if not _app_password:
+    print("[maritime-osint] APP_PASSWORD is required. Set it in your environment or .env file. See .env.example.")
+    sys.exit(1)
+# ── End startup enforcement ──────────────────────────────────────────────────
+
 from functools import wraps
 from pathlib import Path
 
@@ -27,11 +41,11 @@ from pydantic import ValidationError
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+app.secret_key = _secret_key
 
 db.init_db()
 
-APP_PASSWORD = os.getenv("APP_PASSWORD")
+APP_PASSWORD = _app_password
 AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
 
 # Auto-start AIS listener if API key is configured
