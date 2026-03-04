@@ -14,6 +14,12 @@ dependencies = [
     "websockets>=12.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "types-requests",
+]
+
 [tool.ruff]
 # Target Python version — must match Railway/Nixpacks python311 build
 target-version = "py311"
@@ -49,6 +55,43 @@ ignore = [
     "S314",   # xml vulnerability (using standard library xml)
     "S104",   # Binding to all interfaces (common in dev apps)
 ]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+
+# Start with these — tighten later
+warn_return_any = true
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+# Exclude files not in scope for this sprint
+exclude = [
+    "db\\.py",
+    "app\\.py",
+    "ingest\\.py",
+    "normalize\\.py",
+    "ais_listener\\.py",
+    "noaa_ingest\\.py",
+    "reconcile\\.py",
+    "spoofing\\.py",
+    "map_data\\.py",
+    "risk_config\\.py",
+    "dark_periods\\.py",  # remove this once Task 3 below is done
+]
+
+# Tell mypy not to follow imports into excluded modules
+[[tool.mypy.overrides]]
+module = [
+    "db",
+    "normalize",
+    "psycopg2.*",
+    "lxml.*",
+    "websockets.*",
+]
+ignore_missing_imports = true
+follow_imports = "silent"
 
 [tool.ruff.lint.mccabe]
 max-complexity = 20

@@ -20,6 +20,7 @@ IND7 — Ship-to-ship transfer at sea (both vessels slow, close proximity)
 import logging
 import math
 from datetime import datetime
+from typing import Any
 
 import db
 import schemas
@@ -89,7 +90,7 @@ def _risk_level(
     return "LOW"
 
 
-def _ts_to_epoch(ts) -> float:
+def _ts_to_epoch(ts: Any) -> float:
     """Convert timestamp string or datetime to epoch seconds."""
     if isinstance(ts, (int, float)):
         return float(ts)
@@ -148,50 +149,60 @@ def run_detection(
     events: list[schemas.StsEvent] = []
 
     for c in raw:
-        lat1, lon1 = c.get("lat1"), c.get("lon1")
-        lat2, lon2 = c.get("lat2"), c.get("lon2")
+        # Cast raw DB values to float/str early for mypy
+        lat1 = c.get("lat1")
+        lon1 = c.get("lon1")
+        lat2 = c.get("lat2")
+        lon2 = c.get("lon2")
 
         # Skip if coordinates missing
-        if None in (lat1, lon1, lat2, lon2):
+        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
             continue
 
         # Step 2 — exact Haversine check
-        dist_km = _haversine(lat1, lon1, lat2, lon2)
+        dist_km = _haversine(float(lat1), float(lon1), float(lat2), float(lon2))
         if dist_km > max_distance_km:
             continue
 
         # Step 3 — at least one vessel slow
         sog1 = c.get("sog1")
         sog2 = c.get("sog2")
-        if (sog1 is not None and sog2 is not None and
-            sog1 > max_sog and sog2 > max_sog):
+        f_sog1 = float(sog1) if sog1 is not None else None
+        f_sog2 = float(sog2) if sog2 is not None else None
+
+        if (f_sog1 is not None and f_sog2 is not None and
+            f_sog1 > max_sog and f_sog2 > max_sog):
                 continue
 
         # Mid-point for zone lookup
-        mid_lat = (lat1 + lat2) / 2.0
-        mid_lon = (lon1 + lon2) / 2.0
+        mid_lat = (float(lat1) + float(lat2)) / 2.0
+        mid_lon = (float(lon1) + float(lon2)) / 2.0
         zone = _classify_zone(mid_lat, mid_lon)
 
         # Step 4 — sanctions cross-check (cached single-shot query)
-        mmsi1, mmsi2 = c["mmsi1"], c["mmsi2"]
+        mmsi1, mmsi2 = str(c["mmsi1"]), str(c["mmsi2"])
         sanc1 = bool(db.search_sanctions_by_mmsi(mmsi1))
         sanc2 = bool(db.search_sanctions_by_mmsi(mmsi2))
         sanctions_hit = sanc1 or sanc2
 
-        risk = _risk_level(dist_km, sanctions_hit, zone, sog1, sog2)
+        risk = _risk_level(dist_km, sanctions_hit, zone, f_sog1, f_sog2)
 
         try:
+            ev_ts = c.get("ts")
+            if not ev_ts:
+                continue
+
             ev = schemas.StsEvent(
                 mmsi1=mmsi1,
                 mmsi2=mmsi2,
                 vessel_name1=c.get("vessel_name1"),
                 vessel_name2=c.get("vessel_name2"),
-                event_ts=c.get("ts"),
+                event_ts=ev_ts,
                 lat=mid_lat,
                 lon=mid_lon,
                 distance_m=dist_km * 1000,
-                sog1=sog1,
-                sog2=sog2,
+                sog1=f_sog1,
+                sog2=f_sog2,
                 risk_zone=zone,
                 risk_level=risk,
                 sanctions_hit=sanctions_hit,
