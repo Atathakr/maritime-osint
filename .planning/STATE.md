@@ -2,32 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Completed 01-03-PLAN.md — Phase 1 complete, 9/9 tests green, awaiting Railway checkpoint
-last_updated: "2026-03-04T19:03:20.869Z"
-last_activity: 2026-03-04 — Phase 1 plans created (01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md)
+status: phase_complete
+stopped_at: Phase 1 complete — Railway checkpoint passed, pydantic dep fixed, ready for Phase 2
+last_updated: "2026-03-04T19:25:00.000Z"
+last_activity: 2026-03-04 — Phase 1 fully complete (Railway deploy SUCCESS)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 3
   completed_plans: 3
-  percent: 67
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 1 planned — ready for execution
-last_updated: "2026-03-04T14:20:23.188Z"
-last_activity: 2026-03-04 — Phase 1 plans created (01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md)
-progress:
-  [███████░░░] 67%
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 0
-  percent: 0
+  percent: 20
 ---
 
 # Project State
@@ -37,37 +21,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
-**Current focus:** Phase 1 — Database Decomposition
+**Current focus:** Phase 2 — Pre-Computed Risk Scores (next)
 
 ## Current Position
 
-Phase: 1 of 5 (Database Decomposition)
-Plan: 0 of 3 in current phase
-Status: Ready to execute
-Last activity: 2026-03-04 — Phase 1 plans created (01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md)
+Phase: 1 of 5 complete ✅
+Plan: 3 of 3 complete
+Status: Phase 1 done — Railway smoke-deploy verified
+Last activity: 2026-03-04 — Phase 1 Railway checkpoint passed (deployment `9ab320c9` SUCCESS)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 3
+- Average duration: ~24 min/plan
+- Total execution time: ~72 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| Phase 01-database-decomposition | 3 | ~72 min | ~24 min |
 
 **Recent Trend:**
-- Last 5 plans: -
-- Trend: -
+- Last 5 plans: 45 min (P01), 11 min (P02), 15 min (P03)
+- Trend: Stable
 
 *Updated after each plan completion*
-| Phase 01-database-decomposition P02 | 11 | 2 tasks | 7 files |
-| Phase 01-database-decomposition P03 | 15 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -84,10 +66,11 @@ Recent decisions affecting current work:
 - [Phase 01-database-decomposition]: p='?' placeholder pattern kept inline in function bodies (not replaced with _ph()) to match original db.py verbatim style
 - [Phase 01-database-decomposition]: scores.py scores block in __init__.py left commented — no functions to export in Phase 1; Phase 2 fills
 - [Phase 01-database-decomposition]: Startup enforcement moved before load_dotenv() and module imports so .env cannot mask missing production env vars and subprocess tests don't need full dependency chain
+- [Phase 01-database-decomposition]: pydantic must be declared explicitly in requirements.txt — schemas.py imports it directly; was previously a transitive dep of anthropic
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -97,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T19:03:20.863Z
-Stopped at: Completed 01-03-PLAN.md — Phase 1 complete, 9/9 tests green, awaiting Railway checkpoint
-Resume file: None
+Last session: 2026-03-04T19:25:00.000Z
+Stopped at: Phase 1 complete — Railway deploy verified
+Resume file: .planning/ROADMAP.md
