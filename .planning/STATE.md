@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase_complete
-stopped_at: Phase 1 complete — Railway checkpoint passed, pydantic dep fixed, ready for Phase 2
-last_updated: "2026-03-04T19:25:00.000Z"
-last_activity: 2026-03-04 — Phase 1 fully complete (Railway deploy SUCCESS)
+stopped_at: Phase 2 discuss-phase complete — ready for /gsd:plan-phase 2
+last_updated: "2026-03-04T21:00:00.000Z"
+last_activity: 2026-03-04 — Phase 2 context gathered (indicator_json schema + staleness behavior)
 progress:
   total_phases: 5
   completed_phases: 1
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
-**Current focus:** Phase 2 — Pre-Computed Risk Scores (next)
+**Current focus:** Phase 2 — Pre-Computed Risk Scores (context ready, plan next)
 
 ## Current Position
 
@@ -67,6 +67,10 @@ Recent decisions affecting current work:
 - [Phase 01-database-decomposition]: scores.py scores block in __init__.py left commented — no functions to export in Phase 1; Phase 2 fills
 - [Phase 01-database-decomposition]: Startup enforcement moved before load_dotenv() and module imports so .env cannot mask missing production env vars and subprocess tests don't need full dependency chain
 - [Phase 01-database-decomposition]: pydantic must be declared explicitly in requirements.txt — schemas.py imports it directly; was previously a transitive dep of anthropic
+- [Phase 02-pre-computed-risk-scores]: indicator_json stores all 31 indicators (fired + not-fired) as dict keyed by indicator ID; fired indicators: {pts, fired: true, fired_at}; not-fired: {pts: 0, fired: false}
+- [Phase 02-pre-computed-risk-scores]: Staleness fallback = block + recompute inline + persist to vessel_scores; SCORE_STALENESS_MINUTES = 30 hardcoded constant in db/scores.py
+- [Phase 02-pre-computed-risk-scores]: Multi-worker double-refresh via pg_try_advisory_lock(42); SQLite local dev skips the lock; lock ID 42 documented as SCHEDULER_ADVISORY_LOCK_ID
+- [Phase 02-pre-computed-risk-scores]: map_data.py qualitative risk system (CRITICAL/HIGH/MEDIUM/LOW) is NOT changed in Phase 2 — map numeric score display deferred to Phase 5 (FE-2)
 
 ### Pending Todos
 
@@ -80,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T19:25:00.000Z
-Stopped at: Phase 1 complete — Railway deploy verified
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-04T21:00:00.000Z
+Stopped at: Phase 2 discuss-phase complete — context written to .planning/phases/02-pre-computed-risk-scores/02-CONTEXT.md
+Resume file: .planning/phases/02-pre-computed-risk-scores/02-CONTEXT.md
