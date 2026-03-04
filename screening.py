@@ -84,7 +84,14 @@ def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
     seen: set[str] = set()
 
     for entry in ownership:
-        entity_name = (entry.get("entity_name") or "").strip()
+        # Validate row against OwnershipEntry model to catch data issues early
+        try:
+            oe = schemas.OwnershipEntry.model_validate(entry)
+        except Exception:
+            # Skip malformed DB rows
+            continue
+
+        entity_name = oe.entity_name.strip()
         if not entity_name or entity_name in seen:
             continue
         seen.add(entity_name)
@@ -92,8 +99,8 @@ def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
         if matches:
             found.append({
                 "entity_name":        entity_name,
-                "role":               entry.get("role"),
-                "source":             entry.get("source"),
+                "role":               oe.role,
+                "source":             oe.source,
                 "matched_sanctions":  [m.get("entity_name") for m in matches[:3]],
             })
 
@@ -137,7 +144,7 @@ def screen(query: str) -> schemas.ScreeningResult:
             hits = fallback
             query_type = f"{query_type}_name_fallback"
 
-    sanitized_hits = []
+    sanitized_hits: list[schemas.ScreeningHit] = []
     for hit in hits:
         _annotate_hit(hit, query_type)
         # Attach ownership opacity data
@@ -184,14 +191,14 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     Returns a VesselDetail model.
     """
     imo_clean = re.sub(r"\D", "", imo)
-    vessel = db.get_vessel(imo_clean)
+    vessel: dict | None = db.get_vessel(imo_clean)
     # For vessels tracked via AIS but not listed in the sanctions DB, fall back
     # to the ais_vessels table so the profile header has a name and MMSI.
     if vessel is None:
         vessel = db.get_ais_vessel_by_imo(imo_clean)
-    sanctions_hits = db.search_sanctions_by_imo(imo_clean)
+    sanctions_hits: list[dict] = db.search_sanctions_by_imo(imo_clean)
 
-    processed_hits = []
+    processed_hits: list[schemas.ScreeningHit] = []
     for hit in sanctions_hits:
         _annotate_hit(hit, "imo")
         canonical_id = hit.get("canonical_id")
