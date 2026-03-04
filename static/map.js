@@ -69,24 +69,6 @@
     };
   }
 
-  function shipIcon(vessel) {
-    const col = riskColour(vessel);
-    const w = 20;
-    const h = 26;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${w}" height="${h}">
-      <path d="M12 2 L17 8 L17 17 L12 20 L7 17 L7 8 Z" fill="${col}" stroke="#1e293b" stroke-width="1.5"/>
-      <rect x="10.5" y="5" width="3" height="7" fill="#1e293b" opacity="0.35" rx="1"/>
-    </svg>`;
-    return L.divIcon({
-      html:        svg,
-      className:   "",           // clear Leaflet's default white box
-      iconSize:    [w, h],
-      iconAnchor:  [w / 2, h],  // anchor at bottom-center of the icon
-      tooltipAnchor: [0, -h],   // tooltip appears above the icon
-      popupAnchor:   [0, -h],
-    });
-  }
-
   // ── Tooltip content ──────────────────────────────────────────────────────
   function tooltipHtml(v) {
     const name  = escHtml(v.vessel_name || "Unknown");
@@ -184,12 +166,12 @@
     _markers.clearLayers();
     vessels.forEach(v => {
       if (v.lat == null || v.lon == null) return;
-      const marker = L.marker([v.lat, v.lon], { icon: shipIcon(v) });
+      const marker = L.circleMarker([v.lat, v.lon], markerOptions(v));
       marker.bindTooltip(tooltipHtml(v), {
         className:   "map-tooltip-wrapper",
         sticky:      true,
         direction:   "top",
-        offset:      [0, 0],
+        offset:      [0, -6],
       });
       marker.bindPopup(popupHtml(v), {
         className:   "map-popup-wrapper",
