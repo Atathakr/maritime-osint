@@ -121,8 +121,8 @@ def run_detection(mmsi: str | None = None,
             logger.debug("Validation failed for dark period MMSI %s: %s", mmsi_val, e)
 
     # Persist (needs dicts for the DB layer)
-    db.upsert_dark_periods([p.model_dump() for p in enriched])
-    logger.info("Dark period detection: %d gaps found, %d persisted", len(enriched), len(enriched))
+    inserted = db.upsert_dark_periods([p.model_dump() for p in enriched])
+    logger.info("Dark period detection: %d gaps found, %d persisted", len(enriched), inserted)
     return enriched
 
 

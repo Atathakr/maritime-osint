@@ -67,6 +67,7 @@ def _classify_zone(lat: float, lon: float) -> str | None:
 
 
 def _risk_level(
+    distance_km: float,
     sanctions_hit: bool,
     risk_zone: str | None,
     sog1: float | None,
@@ -177,7 +178,7 @@ def run_detection(
         sanc2 = bool(db.search_sanctions_by_mmsi(mmsi2))
         sanctions_hit = sanc1 or sanc2
 
-        risk = _risk_level(sanctions_hit, zone, sog1, sog2)
+        risk = _risk_level(dist_km, sanctions_hit, zone, sog1, sog2)
 
         try:
             ev = schemas.StsEvent(
