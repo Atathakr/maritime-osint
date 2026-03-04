@@ -45,7 +45,7 @@ HIGH_RISK_ZONES = [
 # ── Public interface ──────────────────────────────────────────────────────
 
 def run_detection(mmsi: str | None = None,
-                  min_hours: float = DARK_THRESHOLD_HOURS) -> list[dict]:
+                  min_hours: float = DARK_THRESHOLD_HOURS) -> list[schemas.DarkPeriod]:
     """
     Detect AIS dark periods, persist them, and return the results.
 
@@ -54,17 +54,13 @@ def run_detection(mmsi: str | None = None,
         min_hours: Minimum gap length to report (default 2 h).
 
     Returns:
-        List of dark-period dicts, each enriched with:
-          - risk_level   ('MEDIUM' | 'HIGH' | 'CRITICAL')
-          - risk_zone    (name of high-risk zone, or None)
-          - distance_km  (approximate drift distance, or None)
-          - sanctions_hit (bool — MMSI or IMO matches a sanctions entry)
+        List of DarkPeriod instances.
     """
     raw_gaps = db.find_ais_gaps(mmsi=mmsi, min_hours=min_hours)
     if not raw_gaps:
         return []
 
-    enriched: list[dict] = []
+    enriched: list[schemas.DarkPeriod] = []
     for gap in raw_gaps:
         gap = dict(gap)
         gap_h = float(gap.get("gap_hours") or 0)
@@ -120,28 +116,28 @@ def run_detection(mmsi: str | None = None,
                 sanctions_hit=sanctions_hit,
                 indicator_code="IND1",
             )
-            enriched.append(dp.model_dump())
+            enriched.append(dp)
         except Exception as e:
             logger.debug("Validation failed for dark period MMSI %s: %s", mmsi_val, e)
 
-    # Persist
-    inserted = db.upsert_dark_periods(enriched)
-    logger.info("Dark period detection: %d gaps found, %d persisted", len(enriched), inserted)
+    # Persist (needs dicts for the DB layer)
+    db.upsert_dark_periods([p.model_dump() for p in enriched])
+    logger.info("Dark period detection: %d gaps found, %d persisted", len(enriched), len(enriched))
     return enriched
 
 
-def summarise(periods: list[dict]) -> dict:
+def summarise(periods: list[schemas.DarkPeriod]) -> dict:
     """Return a counts summary dict for API responses."""
     if not periods:
         return {"total": 0, "medium": 0, "high": 0, "critical": 0,
                 "with_sanctions": 0, "in_risk_zone": 0}
     return {
         "total":          len(periods),
-        "medium":         sum(1 for p in periods if p.get("risk_level") == "MEDIUM"),
-        "high":           sum(1 for p in periods if p.get("risk_level") == "HIGH"),
-        "critical":       sum(1 for p in periods if p.get("risk_level") == "CRITICAL"),
-        "with_sanctions": sum(1 for p in periods if p.get("sanctions_hit")),
-        "in_risk_zone":   sum(1 for p in periods if p.get("risk_zone")),
+        "medium":         sum(1 for p in periods if p.risk_level == "MEDIUM"),
+        "high":           sum(1 for p in periods if p.risk_level == "HIGH"),
+        "critical":       sum(1 for p in periods if p.risk_level == "CRITICAL"),
+        "with_sanctions": sum(1 for p in periods if p.sanctions_hit),
+        "in_risk_zone":   sum(1 for p in periods if p.risk_zone),
     }
 
 
