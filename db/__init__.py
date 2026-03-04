@@ -42,11 +42,11 @@ from .vessels import (  # noqa: F401
 )
 
 # ── Sanctions / reconcile ─────────────────────────────────────────────────────
-# PLAN 01-02 step 3: uncomment after extracting sanctions.py
-# from .sanctions import (  # noqa: F401
-#     find_imo_collisions, find_mmsi_imo_collisions,
-#     merge_canonical, rebuild_all_source_tags,
-# )
+# Extracted: plan 01-02 step 3
+from .sanctions import (  # noqa: F401
+    find_imo_collisions, find_mmsi_imo_collisions,
+    merge_canonical, rebuild_all_source_tags,
+)
 
 # ── AIS CRUD ──────────────────────────────────────────────────────────────────
 # PLAN 01-02 step 4: uncomment after extracting ais.py
