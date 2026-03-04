@@ -58,16 +58,16 @@ from .ais import (  # noqa: F401
 )
 
 # ── Findings / detection results ──────────────────────────────────────────────
-# PLAN 01-02 step 5: uncomment after extracting findings.py
-# from .findings import (  # noqa: F401
-#     upsert_dark_periods, get_dark_periods,
-#     upsert_sts_events, get_sts_events, get_sts_zone_count,
-#     upsert_speed_anomalies, get_speed_anomaly_summary,
-#     upsert_loitering_events, get_loitering_summary,
-#     upsert_port_calls, get_port_call_summary,
-#     upsert_psc_detentions, get_psc_detentions,
-#     get_vessel_indicator_summary,
-# )
+# Extracted: plan 01-02 step 5
+from .findings import (  # noqa: F401
+    upsert_dark_periods, get_dark_periods,
+    upsert_sts_events, get_sts_events, get_sts_zone_count,
+    upsert_speed_anomalies, get_speed_anomaly_summary,
+    upsert_loitering_events, get_loitering_summary,
+    upsert_port_calls, get_port_call_summary,
+    upsert_psc_detentions, get_psc_detentions,
+    get_vessel_indicator_summary,
+)
 
 # ── Scores (Phase 2 placeholder) ──────────────────────────────────────────────
 # PLAN 01-02 step 6: stub created; no functions exported in Phase 1
