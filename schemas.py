@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -71,7 +72,7 @@ class SanctionsEntry(BaseModel):
     program: str | None = None
     gross_tonnage: int | None = None
     aliases: list[str] = Field(default_factory=list)
-    identifiers: dict = Field(default_factory=dict)
+    identifiers: dict[str, Any] = Field(default_factory=dict)
     # Ownership opacity enrichment
     build_year: int | None = None
     past_flags: list[str] = Field(default_factory=list)
@@ -172,7 +173,7 @@ class ScreeningHit(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def parse_json_fields(cls, data: dict) -> dict:
+    def parse_json_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Parse JSON strings for list/dict fields (SQLite fallback)."""
         if not isinstance(data, dict):
             return data
