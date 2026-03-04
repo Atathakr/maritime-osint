@@ -30,16 +30,16 @@ from .connection import (  # noqa: F401
 from .schema import init_db  # noqa: F401
 
 # ── Vessels CRUD ──────────────────────────────────────────────────────────────
-# PLAN 01-02 step 2: uncomment after extracting vessels.py
-# from .vessels import (  # noqa: F401
-#     upsert_sanctions_entries, get_sanctions_entries, get_sanctions_counts,
-#     get_vessels, get_vessel, get_vessel_count,
-#     get_vessel_memberships, get_vessel_ownership, get_vessel_flag_history,
-#     get_ais_vessel_by_imo,
-#     search_sanctions_by_imo, search_sanctions_by_mmsi, search_sanctions_by_name,
-#     log_ingest_start, log_ingest_complete, get_ingest_log,
-#     get_stats, get_map_vessels_raw,
-# )
+# Extracted: plan 01-02 step 2
+from .vessels import (  # noqa: F401
+    upsert_sanctions_entries, get_sanctions_entries, get_sanctions_counts,
+    get_vessels, get_vessel, get_vessel_count,
+    get_vessel_memberships, get_vessel_ownership, get_vessel_flag_history,
+    get_ais_vessel_by_imo,
+    search_sanctions_by_imo, search_sanctions_by_mmsi, search_sanctions_by_name,
+    log_ingest_start, log_ingest_complete, get_ingest_log,
+    get_stats, get_map_vessels_raw,
+)
 
 # ── Sanctions / reconcile ─────────────────────────────────────────────────────
 # PLAN 01-02 step 3: uncomment after extracting sanctions.py
