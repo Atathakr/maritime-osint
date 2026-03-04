@@ -78,7 +78,6 @@ exclude = [
     "spoofing\\.py",
     "map_data\\.py",
     "risk_config\\.py",
-    "dark_periods\\.py",  # remove this once Task 3 below is done
 ]
 
 # Tell mypy not to follow imports into excluded modules

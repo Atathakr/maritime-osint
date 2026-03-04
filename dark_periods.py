@@ -61,31 +61,37 @@ def run_detection(mmsi: str | None = None,
         return []
 
     enriched: list[schemas.DarkPeriod] = []
-    for gap in raw_gaps:
-        gap = dict(gap)
+    for row in raw_gaps:
+        gap = dict(row)
         gap_h = float(gap.get("gap_hours") or 0)
 
         # Risk level
+        risk_level = "MEDIUM"
         if gap_h >= CRITICAL_HOURS:
-            gap["risk_level"] = "CRITICAL"
+            risk_level = "CRITICAL"
         elif gap_h >= HIGH_RISK_HOURS:
-            gap["risk_level"] = "HIGH"
-        else:
-            gap["risk_level"] = "MEDIUM"
+            risk_level = "HIGH"
 
         # Zone classification
-        gap["risk_zone"] = _classify_zone(
-            gap.get("last_lat"), gap.get("last_lon")
+        last_lat = gap.get("last_lat")
+        last_lon = gap.get("last_lon")
+        risk_zone = _classify_zone(
+            float(last_lat) if last_lat is not None else None,
+            float(last_lon) if last_lon is not None else None,
         )
 
         # Boost risk level if in a high-risk zone
-        if gap["risk_zone"] and gap["risk_level"] == "MEDIUM":
-            gap["risk_level"] = "HIGH"
+        if risk_zone and risk_level == "MEDIUM":
+            risk_level = "HIGH"
 
         # Approximate distance between disappear and reappear points
-        gap["distance_km"] = _haversine(
-            gap.get("last_lat"),    gap.get("last_lon"),
-            gap.get("reappear_lat"), gap.get("reappear_lon"),
+        reappear_lat = gap.get("reappear_lat")
+        reappear_lon = gap.get("reappear_lon")
+        distance_km = _haversine(
+            float(last_lat) if last_lat is not None else None,
+            float(last_lon) if last_lon is not None else None,
+            float(reappear_lat) if reappear_lat is not None else None,
+            float(reappear_lon) if reappear_lon is not None else None,
         )
 
         # Sanctions cross-reference
@@ -100,19 +106,19 @@ def run_detection(mmsi: str | None = None,
 
         try:
             dp = schemas.DarkPeriod(
-                mmsi=mmsi_val,
-                imo_number=imo_val,
+                mmsi=str(mmsi_val),
+                imo_number=str(imo_val) if imo_val else None,
                 vessel_name=gap.get("vessel_name"),
                 gap_start=gap["gap_start"],
                 gap_end=gap["gap_end"],
                 gap_hours=gap_h,
-                last_lat=gap.get("last_lat"),
-                last_lon=gap.get("last_lon"),
-                reappear_lat=gap.get("reappear_lat"),
-                reappear_lon=gap.get("reappear_lon"),
-                distance_km=gap["distance_km"],
-                risk_zone=gap["risk_zone"],
-                risk_level=gap["risk_level"],
+                last_lat=float(last_lat) if last_lat is not None else None,
+                last_lon=float(last_lon) if last_lon is not None else None,
+                reappear_lat=float(reappear_lat) if reappear_lat is not None else None,
+                reappear_lon=float(reappear_lon) if reappear_lon is not None else None,
+                distance_km=distance_km,
+                risk_zone=risk_zone,
+                risk_level=risk_level,
                 sanctions_hit=sanctions_hit,
                 indicator_code="IND1",
             )
@@ -143,7 +149,7 @@ def summarise(periods: list[schemas.DarkPeriod]) -> dict:
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-def _classify_zone(lat, lon) -> str | None:
+def _classify_zone(lat: float | None, lon: float | None) -> str | None:
     if lat is None or lon is None:
         return None
     for lat_min, lat_max, lon_min, lon_max, name in HIGH_RISK_ZONES:
@@ -152,9 +158,10 @@ def _classify_zone(lat, lon) -> str | None:
     return None
 
 
-def _haversine(lat1, lon1, lat2, lon2) -> float | None:
+def _haversine(lat1: float | None, lon1: float | None,
+               lat2: float | None, lon2: float | None) -> float | None:
     """Great-circle distance in km between two points."""
-    if any(v is None for v in (lat1, lon1, lat2, lon2)):
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
         return None
     r = 6371.0
     dlat = math.radians(lat2 - lat1)
