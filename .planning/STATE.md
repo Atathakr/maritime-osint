@@ -3,11 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
+stopped_at: Completed 01-02-PLAN.md — db/ fully extracted, all 4 DB-3 tests pass
+last_updated: "2026-03-04T18:55:22.002Z"
+last_activity: 2026-03-04 — Phase 1 plans created (01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md)
+progress:
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 2
+  percent: 67
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: ready_to_execute
 stopped_at: Phase 1 planned — ready for execution
 last_updated: "2026-03-04T14:20:23.188Z"
 last_activity: 2026-03-04 — Phase 1 plans created (01-PLAN.md, 01-02-PLAN.md, 01-03-PLAN.md)
 progress:
-  total_phases: 5
+  [███████░░░] 67%
   completed_phases: 0
   total_plans: 3
   completed_plans: 0
@@ -50,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01-database-decomposition P02 | 11 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -62,6 +79,9 @@ Recent decisions affecting current work:
 - [Pre-Phase 1]: All callers use `import db; db.fn()` pattern — re-export surface in __init__.py must be complete before db.py is deleted (Pitfall B2)
 - [Pre-Phase 2]: APScheduler 3.x selected over Celery+Redis; no new Railway services beyond existing PostgreSQL
 - [Pre-Phase 4]: flask-talisman force_https=False required for Railway TLS termination at edge proxy
+- [Phase 01-database-decomposition]: sanctions.py imports get_vessel_memberships from .vessels — intra-package dep needed by rebuild_all_source_tags
+- [Phase 01-database-decomposition]: p='?' placeholder pattern kept inline in function bodies (not replaced with _ph()) to match original db.py verbatim style
+- [Phase 01-database-decomposition]: scores.py scores block in __init__.py left commented — no functions to export in Phase 1; Phase 2 fills
 
 ### Pending Todos
 
@@ -75,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T14:20:23.182Z
-Stopped at: Phase 1 planned — ready for execution
-Resume file: .planning/phases/01-database-decomposition/01-PLAN.md
+Last session: 2026-03-04T18:55:21.997Z
+Stopped at: Completed 01-02-PLAN.md — db/ fully extracted, all 4 DB-3 tests pass
+Resume file: None
