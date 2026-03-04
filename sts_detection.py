@@ -17,8 +17,8 @@ Shadow Fleet indicators addressed
 IND7 — Ship-to-ship transfer at sea (both vessels slow, close proximity)
 """
 
-import math
 import logging
+import math
 from datetime import datetime
 
 import db
@@ -51,12 +51,12 @@ _ZONES = [
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in km."""
-    R = 6371.0
+    r = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return R * 2 * math.asin(math.sqrt(min(a, 1.0)))
+    return r * 2 * math.asin(math.sqrt(min(a, 1.0)))
 
 
 def _classify_zone(lat: float, lon: float) -> str | None:
@@ -67,7 +67,6 @@ def _classify_zone(lat: float, lon: float) -> str | None:
 
 
 def _risk_level(
-    distance_km: float,
     sanctions_hit: bool,
     risk_zone: str | None,
     sog1: float | None,
@@ -118,8 +117,8 @@ def _deduplicate(events: list[schemas.StsEvent]) -> list[schemas.StsEvent]:
 
         duplicate = False
         for k in kept:
-            if tuple(sorted([k.mmsi1, k.mmsi2])) == pair:
-                if abs(_ts_to_epoch(k.event_ts) - ev_ts) <= threshold:
+            if (tuple(sorted([k.mmsi1, k.mmsi2])) == pair and
+                abs(_ts_to_epoch(k.event_ts) - ev_ts) <= threshold):
                     duplicate = True
                     break
         if not duplicate:
@@ -163,8 +162,8 @@ def run_detection(
         # Step 3 — at least one vessel slow
         sog1 = c.get("sog1")
         sog2 = c.get("sog2")
-        if sog1 is not None and sog2 is not None:
-            if sog1 > max_sog and sog2 > max_sog:
+        if (sog1 is not None and sog2 is not None and
+            sog1 > max_sog and sog2 > max_sog):
                 continue
 
         # Mid-point for zone lookup
@@ -178,7 +177,7 @@ def run_detection(
         sanc2 = bool(db.search_sanctions_by_mmsi(mmsi2))
         sanctions_hit = sanc1 or sanc2
 
-        risk = _risk_level(dist_km, sanctions_hit, zone, sog1, sog2)
+        risk = _risk_level(sanctions_hit, zone, sog1, sog2)
 
         try:
             ev = schemas.StsEvent(

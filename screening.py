@@ -18,8 +18,8 @@ import re
 from datetime import date
 
 import db
-import schemas
 import risk_config
+import schemas
 
 
 def _clean_imo(raw: str) -> str | None:
@@ -122,7 +122,12 @@ def screen(query: str) -> schemas.ScreeningResult:
     query = query.strip()
     if not query:
         return schemas.ScreeningResult(
-            query="", query_type="name", sanctioned=False, total_hits=0, hits=[], error="Empty query"
+            query="",
+            query_type="name",
+            sanctioned=False,
+            total_hits=0,
+            hits=[],
+            error="Empty query",
         )
 
     query_type = _detect_query_type(query)
@@ -250,10 +255,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     # Build indicator_summary — always include flag/hop signals; add AIS signals if MMSI available
     indicator_summary: schemas.IndicatorSummary | None = None
     try:
-        if mmsi:
-            raw = db.get_vessel_indicator_summary(mmsi)
-        else:
-            raw = {}
+        raw = db.get_vessel_indicator_summary(mmsi) if mmsi else {}
         raw["flag_risk_tier"] = flag_tier
         raw["flag_hop_count"] = hop_count
         indicator_summary = schemas.IndicatorSummary.model_validate(raw)
@@ -296,9 +298,10 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         owner_sanctions_hits, owner_sanctions_score = _check_ownership_chain(canonical_id_for_chain)
         if owner_sanctions_hits:
             names = ", ".join(h["entity_name"] for h in owner_sanctions_hits[:2])
+            more_count = len(owner_sanctions_hits) - 2
+            more_suffix = f" and {more_count} more" if more_count > 0 else ""
             risk_factors.append(
-                f"Ownership chain sanctions match: {names}"
-                + (f" and {len(owner_sanctions_hits) - 2} more" if len(owner_sanctions_hits) > 2 else "")
+                f"Ownership chain sanctions match: {names}{more_suffix}"
                 + f" (+{owner_sanctions_score} pts, IND21)"
             )
     elif canonical_id_for_chain:
@@ -310,13 +313,16 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if vessel and vessel.get("entity_name"):
         canonical_name = vessel["entity_name"].strip().upper()
         ais_vessel = db.get_ais_vessel_by_imo(imo_clean)
-        if ais_vessel and ais_vessel.get("vessel_name"):
-            ais_name = ais_vessel["vessel_name"].strip().upper()
-            if ais_name and ais_name != canonical_name:
+        if (ais_vessel and ais_vessel.get("vessel_name") and
+            (ais_name := ais_vessel["vessel_name"].strip().upper()) and
+            ais_name != canonical_name):
                 # Flag only when neither name is a prefix/substring of the other
                 # (handles common cases like "VESSEL NAME" vs "VESSEL NAME I")
                 if canonical_name not in ais_name and ais_name not in canonical_name:
-                    name_discrepancy = f'AIS: "{ais_vessel["vessel_name"]}" ≠ Canonical: "{vessel["entity_name"]}"'
+                    name_discrepancy = (
+                        f'AIS: "{ais_vessel["vessel_name"]}" ≠ '
+                        f'Canonical: "{vessel["entity_name"]}"'
+                    )
 
     # ── IND31: PSC detention record ───────────────────────────────────────
     psc_detentions = db.get_psc_detentions(imo_clean)
