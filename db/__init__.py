@@ -26,8 +26,8 @@ from .connection import (  # noqa: F401
 )
 
 # ── Schema ────────────────────────────────────────────────────────────────────
-# PLAN 01-02 step 1: uncomment after extracting schema.py
-# from .schema import init_db  # noqa: F401
+# Extracted: plan 01-02 step 1
+from .schema import init_db  # noqa: F401
 
 # ── Vessels CRUD ──────────────────────────────────────────────────────────────
 # PLAN 01-02 step 2: uncomment after extracting vessels.py
