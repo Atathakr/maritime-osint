@@ -16,10 +16,11 @@ vessel) with attached memberships list for data lineage.  Each hit includes:
 
 import re
 from datetime import date
+from typing import Any
 
 import db
-import schemas
 import risk_config
+import schemas
 
 
 def _clean_imo(raw: str) -> str | None:
@@ -48,7 +49,7 @@ def _detect_query_type(query: str) -> str:
     return "name"
 
 
-def _annotate_hit(hit: dict, query_type: str) -> None:
+def _annotate_hit(hit: dict[str, Any], query_type: str) -> None:
     """
     Annotate a single hit dict in-place with match_confidence.
     JSON parsing and list initialisation are handled by ScreeningHit's
@@ -62,7 +63,7 @@ def _annotate_hit(hit: dict, query_type: str) -> None:
         hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
 
 
-def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
+def _check_ownership_chain(canonical_id: str) -> tuple[list[dict[str, Any]], int]:
     """
     Check whether any entity in the vessel's ownership / management chain
     appears on a sanctions list (IND21).
@@ -80,11 +81,18 @@ def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
     if not ownership:
         return [], 0
 
-    found: list[dict] = []
+    found: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     for entry in ownership:
-        entity_name = (entry.get("entity_name") or "").strip()
+        # Validate row against OwnershipEntry model to catch data issues early
+        try:
+            oe = schemas.OwnershipEntry.model_validate(entry)
+        except Exception:
+            # Skip malformed DB rows
+            continue
+
+        entity_name = oe.entity_name.strip()
         if not entity_name or entity_name in seen:
             continue
         seen.add(entity_name)
@@ -92,8 +100,8 @@ def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
         if matches:
             found.append({
                 "entity_name":        entity_name,
-                "role":               entry.get("role"),
-                "source":             entry.get("source"),
+                "role":               oe.role,
+                "source":             oe.source,
                 "matched_sanctions":  [m.get("entity_name") for m in matches[:3]],
             })
 
@@ -115,37 +123,45 @@ def screen(query: str) -> schemas.ScreeningResult:
     query = query.strip()
     if not query:
         return schemas.ScreeningResult(
-            query="", query_type="name", sanctioned=False, total_hits=0, hits=[], error="Empty query"
+            query="",
+            query_type="name",
+            sanctioned=False,
+            total_hits=0,
+            hits=[],
+            error="Empty query",
         )
 
     query_type = _detect_query_type(query)
-    hits: list[dict] = []
+    hits: list[dict[str, Any]] = []
+    imo_val: str | None = None
+    mmsi_val: str | None = None
 
     if query_type == "imo":
-        imo = _clean_imo(query)
-        hits = db.search_sanctions_by_imo(imo)
+        imo_val = _clean_imo(query)
+        if imo_val:
+            hits = db.search_sanctions_by_imo(imo_val)
     elif query_type == "mmsi":
-        mmsi = _clean_mmsi(query)
-        hits = db.search_sanctions_by_mmsi(mmsi)
+        mmsi_val = _clean_mmsi(query)
+        if mmsi_val:
+            hits = db.search_sanctions_by_mmsi(mmsi_val)
     else:
         hits = db.search_sanctions_by_name(query)
 
     # If an IMO/MMSI query returned nothing, try a name fallback
     if not hits and query_type in ("imo", "mmsi"):
-        fallback = db.search_sanctions_by_name(query)
-        if fallback:
-            hits = fallback
+        hits = db.search_sanctions_by_name(query)
+        if hits:
             query_type = f"{query_type}_name_fallback"
 
-    sanitized_hits = []
+    sanitized_hits: list[schemas.ScreeningHit] = []
     for hit in hits:
         _annotate_hit(hit, query_type)
         # Attach ownership opacity data
         canonical_id = hit.get("canonical_id")
-        imo = hit.get("imo_number")
+        hit_imo = hit.get("imo_number")
         if canonical_id:
             hit["ownership"]    = db.get_vessel_ownership(canonical_id)
-            hit["flag_history"] = db.get_vessel_flag_history(imo) if imo else []
+            hit["flag_history"] = db.get_vessel_flag_history(str(hit_imo)) if hit_imo else []
         try:
             sanitized_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:
@@ -184,21 +200,21 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     Returns a VesselDetail model.
     """
     imo_clean = re.sub(r"\D", "", imo)
-    vessel = db.get_vessel(imo_clean)
+    vessel: dict[str, Any] | None = db.get_vessel(imo_clean)
     # For vessels tracked via AIS but not listed in the sanctions DB, fall back
     # to the ais_vessels table so the profile header has a name and MMSI.
     if vessel is None:
         vessel = db.get_ais_vessel_by_imo(imo_clean)
-    sanctions_hits = db.search_sanctions_by_imo(imo_clean)
+    sanctions_hits: list[dict[str, Any]] = db.search_sanctions_by_imo(imo_clean)
 
-    processed_hits = []
+    processed_hits: list[schemas.ScreeningHit] = []
     for hit in sanctions_hits:
         _annotate_hit(hit, "imo")
         canonical_id = hit.get("canonical_id")
         imo_num = hit.get("imo_number")
         if canonical_id:
             hit["ownership"]    = db.get_vessel_ownership(canonical_id)
-            hit["flag_history"] = db.get_vessel_flag_history(imo_num) if imo_num else []
+            hit["flag_history"] = db.get_vessel_flag_history(str(imo_num)) if imo_num else []
         try:
             processed_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:
@@ -243,10 +259,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     # Build indicator_summary — always include flag/hop signals; add AIS signals if MMSI available
     indicator_summary: schemas.IndicatorSummary | None = None
     try:
-        if mmsi:
-            raw = db.get_vessel_indicator_summary(mmsi)
-        else:
-            raw = {}
+        raw: dict[str, Any] = db.get_vessel_indicator_summary(str(mmsi)) if mmsi else {}
         raw["flag_risk_tier"] = flag_tier
         raw["flag_hop_count"] = hop_count
         indicator_summary = schemas.IndicatorSummary.model_validate(raw)
@@ -289,9 +302,10 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         owner_sanctions_hits, owner_sanctions_score = _check_ownership_chain(canonical_id_for_chain)
         if owner_sanctions_hits:
             names = ", ".join(h["entity_name"] for h in owner_sanctions_hits[:2])
+            more_count = len(owner_sanctions_hits) - 2
+            more_suffix = f" and {more_count} more" if more_count > 0 else ""
             risk_factors.append(
-                f"Ownership chain sanctions match: {names}"
-                + (f" and {len(owner_sanctions_hits) - 2} more" if len(owner_sanctions_hits) > 2 else "")
+                f"Ownership chain sanctions match: {names}{more_suffix}"
                 + f" (+{owner_sanctions_score} pts, IND21)"
             )
     elif canonical_id_for_chain:
@@ -303,13 +317,16 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     if vessel and vessel.get("entity_name"):
         canonical_name = vessel["entity_name"].strip().upper()
         ais_vessel = db.get_ais_vessel_by_imo(imo_clean)
-        if ais_vessel and ais_vessel.get("vessel_name"):
-            ais_name = ais_vessel["vessel_name"].strip().upper()
-            if ais_name and ais_name != canonical_name:
+        if (ais_vessel and ais_vessel.get("vessel_name") and
+            (ais_name := ais_vessel["vessel_name"].strip().upper()) and
+            ais_name != canonical_name):
                 # Flag only when neither name is a prefix/substring of the other
                 # (handles common cases like "VESSEL NAME" vs "VESSEL NAME I")
                 if canonical_name not in ais_name and ais_name not in canonical_name:
-                    name_discrepancy = f'AIS: "{ais_vessel["vessel_name"]}" ≠ Canonical: "{vessel["entity_name"]}"'
+                    name_discrepancy = (
+                        f'AIS: "{ais_vessel["vessel_name"]}" ≠ '
+                        f'Canonical: "{vessel["entity_name"]}"'
+                    )
 
     # ── IND31: PSC detention record ───────────────────────────────────────
     psc_detentions = db.get_psc_detentions(imo_clean)
