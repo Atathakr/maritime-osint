@@ -1342,7 +1342,10 @@ def get_vessel_memberships(canonical_id: str) -> list[dict]:
 
 
 def get_vessel_ownership(canonical_id: str) -> list[dict]:
-    """Return all ownership / management entries for one canonical vessel."""
+    """
+    Return all ownership / management entries for one canonical vessel.
+    Each row matches the structure of schemas.OwnershipEntry (role, entity_name, source).
+    """
     p = "?" if _BACKEND == "sqlite" else "%s"
     with _conn() as conn:
         c = _cursor(conn)

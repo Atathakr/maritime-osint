@@ -75,7 +75,7 @@ class SanctionsEntry(BaseModel):
     # Ownership opacity enrichment
     build_year: int | None = None
     past_flags: list[str] = Field(default_factory=list)
-    ownership_entries: list[dict] = Field(default_factory=list)
+    ownership_entries: list[OwnershipEntry] = Field(default_factory=list)
 
 
 class DarkPeriod(BaseModel):
@@ -168,7 +168,7 @@ class ScreeningHit(BaseModel):
     call_sign: str | None = None
     gross_tonnage: int | None = None
     flag_history: list[dict] = Field(default_factory=list)
-    ownership: list[dict] = Field(default_factory=list)
+    ownership: list[OwnershipEntry] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
