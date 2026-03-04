@@ -16,6 +16,7 @@ vessel) with attached memberships list for data lineage.  Each hit includes:
 
 import re
 from datetime import date
+from typing import Any
 
 import db
 import risk_config
@@ -48,7 +49,7 @@ def _detect_query_type(query: str) -> str:
     return "name"
 
 
-def _annotate_hit(hit: dict, query_type: str) -> None:
+def _annotate_hit(hit: dict[str, Any], query_type: str) -> None:
     """
     Annotate a single hit dict in-place with match_confidence.
     JSON parsing and list initialisation are handled by ScreeningHit's
@@ -62,7 +63,7 @@ def _annotate_hit(hit: dict, query_type: str) -> None:
         hit["match_confidence"] = "MEDIUM — name match (verify IMO)"
 
 
-def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
+def _check_ownership_chain(canonical_id: str) -> tuple[list[dict[str, Any]], int]:
     """
     Check whether any entity in the vessel's ownership / management chain
     appears on a sanctions list (IND21).
@@ -80,7 +81,7 @@ def _check_ownership_chain(canonical_id: str) -> tuple[list[dict], int]:
     if not ownership:
         return [], 0
 
-    found: list[dict] = []
+    found: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     for entry in ownership:
@@ -131,22 +132,25 @@ def screen(query: str) -> schemas.ScreeningResult:
         )
 
     query_type = _detect_query_type(query)
-    hits: list[dict] = []
+    hits: list[dict[str, Any]] = []
+    imo_val: str | None = None
+    mmsi_val: str | None = None
 
     if query_type == "imo":
-        imo = _clean_imo(query)
-        hits = db.search_sanctions_by_imo(imo)
+        imo_val = _clean_imo(query)
+        if imo_val:
+            hits = db.search_sanctions_by_imo(imo_val)
     elif query_type == "mmsi":
-        mmsi = _clean_mmsi(query)
-        hits = db.search_sanctions_by_mmsi(mmsi)
+        mmsi_val = _clean_mmsi(query)
+        if mmsi_val:
+            hits = db.search_sanctions_by_mmsi(mmsi_val)
     else:
         hits = db.search_sanctions_by_name(query)
 
     # If an IMO/MMSI query returned nothing, try a name fallback
     if not hits and query_type in ("imo", "mmsi"):
-        fallback = db.search_sanctions_by_name(query)
-        if fallback:
-            hits = fallback
+        hits = db.search_sanctions_by_name(query)
+        if hits:
             query_type = f"{query_type}_name_fallback"
 
     sanitized_hits: list[schemas.ScreeningHit] = []
@@ -154,10 +158,10 @@ def screen(query: str) -> schemas.ScreeningResult:
         _annotate_hit(hit, query_type)
         # Attach ownership opacity data
         canonical_id = hit.get("canonical_id")
-        imo = hit.get("imo_number")
+        hit_imo = hit.get("imo_number")
         if canonical_id:
             hit["ownership"]    = db.get_vessel_ownership(canonical_id)
-            hit["flag_history"] = db.get_vessel_flag_history(imo) if imo else []
+            hit["flag_history"] = db.get_vessel_flag_history(str(hit_imo)) if hit_imo else []
         try:
             sanitized_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:
@@ -196,12 +200,12 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     Returns a VesselDetail model.
     """
     imo_clean = re.sub(r"\D", "", imo)
-    vessel: dict | None = db.get_vessel(imo_clean)
+    vessel: dict[str, Any] | None = db.get_vessel(imo_clean)
     # For vessels tracked via AIS but not listed in the sanctions DB, fall back
     # to the ais_vessels table so the profile header has a name and MMSI.
     if vessel is None:
         vessel = db.get_ais_vessel_by_imo(imo_clean)
-    sanctions_hits: list[dict] = db.search_sanctions_by_imo(imo_clean)
+    sanctions_hits: list[dict[str, Any]] = db.search_sanctions_by_imo(imo_clean)
 
     processed_hits: list[schemas.ScreeningHit] = []
     for hit in sanctions_hits:
@@ -210,7 +214,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
         imo_num = hit.get("imo_number")
         if canonical_id:
             hit["ownership"]    = db.get_vessel_ownership(canonical_id)
-            hit["flag_history"] = db.get_vessel_flag_history(imo_num) if imo_num else []
+            hit["flag_history"] = db.get_vessel_flag_history(str(imo_num)) if imo_num else []
         try:
             processed_hits.append(schemas.ScreeningHit.model_validate(hit))
         except Exception:
@@ -255,7 +259,7 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     # Build indicator_summary — always include flag/hop signals; add AIS signals if MMSI available
     indicator_summary: schemas.IndicatorSummary | None = None
     try:
-        raw = db.get_vessel_indicator_summary(mmsi) if mmsi else {}
+        raw: dict[str, Any] = db.get_vessel_indicator_summary(str(mmsi)) if mmsi else {}
         raw["flag_risk_tier"] = flag_tier
         raw["flag_hop_count"] = hop_count
         indicator_summary = schemas.IndicatorSummary.model_validate(raw)
