@@ -20,7 +20,7 @@ flagged, and trust that the data is fresh and the application is hardened.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Database Decomposition** - Split db.py into db/ package with re-exports; enforce SECRET_KEY; remove unused Anthropic SDK. Zero behavior change. (completed 2026-03-04)
-- [ ] **Phase 2: Pre-Computed Risk Scores** - Add vessel_scores table with APScheduler refresh; score history; staleness fallback; N+1 elimination; AIS archival.
+- [x] **Phase 2: Pre-Computed Risk Scores** - Add vessel_scores table with APScheduler refresh; score history; staleness fallback; N+1 elimination; AIS archival. (completed 2026-03-05)
 - [ ] **Phase 3: Detection Test Coverage** - Extract pure detect() functions from all 5 detection modules; pytest suite with synthetic AIS fixtures; conftest guards.
 - [ ] **Phase 4: Security Hardening** - Flask-Limiter on login (PostgreSQL backend + ProxyFix); CSRF on login only; flask-talisman (CSP report-only then enforced); CodeQL dismissals.
 - [ ] **Phase 5: Frontend UX** - Vessel ranking table; numeric scores everywhere; freshness stamps; indicator breakdown; vessel permalink; CSV export.
@@ -127,7 +127,7 @@ Phases execute in numeric order. Phases 2 and 3 can run in parallel (both depend
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Database Decomposition | 3/3 | Complete   | 2026-03-04 |
-| 2. Pre-Computed Risk Scores | 3/4 | In Progress|  |
+| 2. Pre-Computed Risk Scores | 4/4 | Complete   | 2026-03-05 |
 | 3. Detection Test Coverage | 0/3 | Not started | - |
 | 4. Security Hardening | 0/3 | Not started | - |
 | 5. Frontend UX | 0/3 | Not started | - |
