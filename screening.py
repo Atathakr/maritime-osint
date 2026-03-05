@@ -15,9 +15,10 @@ vessel) with attached memberships list for data lineage.  Each hit includes:
 """
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import db
+from db.scores import SCORE_STALENESS_MINUTES
 import schemas
 import risk_config
 
@@ -159,6 +160,185 @@ def screen(query: str) -> schemas.ScreeningResult:
         total_hits=len(sanitized_hits),
         hits=sanitized_hits,
     )
+
+
+def score_is_stale(score_row: dict, minutes: int = SCORE_STALENESS_MINUTES) -> bool:
+    """
+    Return True if the cached score should be recomputed.
+    Triggers on: is_stale flag set, computed_at missing/unparseable, or age > minutes.
+    """
+    if score_row.get("is_stale"):
+        return True
+    computed_at_str = score_row.get("computed_at")
+    if not computed_at_str:
+        return True
+    try:
+        # Strip trailing 'Z' for Python <3.11 compatibility; then attach UTC
+        ts = datetime.fromisoformat(computed_at_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - ts > timedelta(minutes=minutes)
+    except (ValueError, TypeError):
+        return True
+
+
+def compute_vessel_score(imo: str) -> dict:
+    """
+    Compute composite risk score and full indicator breakdown for a vessel.
+
+    Returns a dict with:
+      composite_score  int         0-100 (100 = sanctioned)
+      is_sanctioned    bool
+      indicator_json   dict        all 31 IND keys; see 02-CONTEXT.md schema
+      computed_at      str         ISO 8601 UTC timestamp
+
+    Called by:
+      - APScheduler refresh job (_do_score_refresh in app.py)
+      - screen_vessel_detail() staleness fallback
+    """
+    imo_clean = re.sub(r"\D", "", imo)
+    computed_at = datetime.now(timezone.utc).isoformat()
+
+    # ── Initialise all 31 indicators to not-fired ─────────────────────
+    ind: dict[str, dict] = {f"IND{i}": {"pts": 0, "fired": False} for i in range(1, 32)}
+
+    # ── Vessel and sanctions lookup ───────────────────────────────────
+    vessel = db.get_vessel(imo_clean)
+    if vessel is None:
+        vessel = db.get_ais_vessel_by_imo(imo_clean)
+    sanctions_hits_raw = db.search_sanctions_by_imo(imo_clean)
+    is_sanctioned = len(sanctions_hits_raw) > 0
+
+    # ── IND17: Flag risk tier (static — no fired_at) ──────────────────
+    flag_code: str | None = None
+    if vessel and vessel.get("flag_normalized"):
+        flag_code = vessel["flag_normalized"]
+    elif sanctions_hits_raw:
+        flag_code = sanctions_hits_raw[0].get("flag_state")
+    flag_tier = risk_config.get_flag_tier(flag_code)
+    flag_score = flag_tier * 7
+    if flag_tier > 0:
+        ind["IND17"] = {"pts": flag_score, "fired": True}
+
+    # ── IND15: Flag hopping (static — no fired_at) ───────────────────
+    flag_history = db.get_vessel_flag_history(imo_clean)
+    distinct_flags = len({f.get("flag_state") for f in flag_history if f.get("flag_state")})
+    hop_count = max(0, distinct_flags - 1)
+    hop_score = min(hop_count * 8, 16)
+    if hop_count > 0:
+        ind["IND15"] = {"pts": hop_score, "fired": True}
+
+    # ── AIS-based indicators (require MMSI) ──────────────────────────
+    mmsi: str | None = None
+    if vessel and vessel.get("mmsi"):
+        mmsi = vessel["mmsi"]
+    elif sanctions_hits_raw:
+        mmsi = sanctions_hits_raw[0].get("mmsi")
+
+    dp = sts = sts_zones = spoof = port = loiter = 0
+    if mmsi:
+        raw = db.get_vessel_indicator_summary(mmsi)
+
+        # IND1: Dark periods
+        dp = raw.get("dp_count") or 0
+        pts = min(dp * 10, 40)
+        if dp > 0:
+            ind["IND1"] = {"pts": pts, "fired": True, "fired_at": raw.get("dp_last_ts") or computed_at}
+
+        # IND7: STS events
+        sts = raw.get("sts_count") or 0
+        pts = min(sts * 15, 45)
+        if sts > 0:
+            ind["IND7"] = {"pts": pts, "fired": True, "fired_at": raw.get("sts_last_ts") or computed_at}
+
+        # IND8: STS in risk zone (fired_at reuses STS timestamp)
+        sts_zones = raw.get("sts_risk_zone_count") or 0
+        pts = min(sts_zones * 5, 10)
+        if sts_zones > 0:
+            ind["IND8"] = {"pts": pts, "fired": True, "fired_at": raw.get("sts_last_ts") or computed_at}
+
+        # IND10: Speed anomaly / AIS spoofing
+        spoof = raw.get("spoof_count") or 0
+        pts = min(spoof * 8, 24)
+        if spoof > 0:
+            ind["IND10"] = {"pts": pts, "fired": True, "fired_at": raw.get("spoof_last_ts") or computed_at}
+
+        # IND9: Loitering
+        loiter = raw.get("loiter_count") or 0
+        pts = min(loiter * 5, 15)
+        if loiter > 0:
+            ind["IND9"] = {"pts": pts, "fired": True, "fired_at": raw.get("loiter_last_ts") or computed_at}
+
+        # IND29: Sanctioned port calls
+        port = raw.get("port_count") or 0
+        pts = min(port * 20, 40)
+        if port > 0:
+            ind["IND29"] = {"pts": pts, "fired": True, "fired_at": raw.get("port_last_ts") or computed_at}
+
+    # ── IND23: Vessel age (static — no fired_at) ──────────────────────
+    build_year = vessel.get("build_year") if vessel else None
+    age_score = 0
+    if build_year and isinstance(build_year, int):
+        vessel_age = date.today().year - build_year
+        age_score = max(
+            0,
+            min(
+                (vessel_age - risk_config.IND23_AGE_THRESHOLD) * risk_config.IND23_PTS_PER_YEAR,
+                risk_config.IND23_CAP,
+            ),
+        )
+        if age_score > 0:
+            ind["IND23"] = {"pts": age_score, "fired": True}
+
+    # ── IND21: Ownership-chain sanctions match (static — no fired_at) ──
+    canonical_id: str | None = None
+    if vessel and vessel.get("canonical_id"):
+        canonical_id = vessel["canonical_id"]
+    elif sanctions_hits_raw:
+        canonical_id = sanctions_hits_raw[0].get("canonical_id")
+
+    owner_sanctions_score = 0
+    if canonical_id and not is_sanctioned:
+        _, owner_sanctions_score = _check_ownership_chain(canonical_id)
+        if owner_sanctions_score > 0:
+            ind["IND21"] = {"pts": owner_sanctions_score, "fired": True}
+
+    # ── IND31: PSC detentions (fired_at = detention_date) ─────────────
+    psc_detentions = db.get_psc_detentions(imo_clean)
+    psc_score = min(len(psc_detentions) * risk_config.IND31_PER_DETENTION, risk_config.IND31_CAP)
+    if psc_detentions:
+        ind["IND31"] = {
+            "pts": psc_score,
+            "fired": True,
+            "fired_at": psc_detentions[0].get("detention_date") or computed_at,
+        }
+
+    # ── IND16: Name discrepancy (static — no fired_at) ────────────────
+    if vessel and vessel.get("entity_name") and mmsi:
+        canonical_name = vessel["entity_name"].strip().upper()
+        ais_vessel = db.get_ais_vessel_by_imo(imo_clean)
+        if ais_vessel and ais_vessel.get("vessel_name"):
+            ais_name = ais_vessel["vessel_name"].strip().upper()
+            if ais_name and ais_name != canonical_name:
+                if canonical_name not in ais_name and ais_name not in canonical_name:
+                    ind["IND16"] = {"pts": 0, "fired": True}  # detected but no pts in current formula
+
+    # ── Composite score ────────────────────────────────────────────────
+    if is_sanctioned:
+        composite_score = 100
+    else:
+        composite_score = min(
+            min(dp * 10, 40) + min(sts * 15, 45) + min(sts_zones * 5, 10)
+            + flag_score + hop_score + min(spoof * 8, 24)
+            + min(port * 20, 40) + min(loiter * 5, 15) + age_score
+            + owner_sanctions_score + psc_score,
+            99,
+        )
+
+    return {
+        "composite_score": composite_score,
+        "is_sanctioned":   is_sanctioned,
+        "indicator_json":  ind,
+        "computed_at":     computed_at,
+    }
 
 
 def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
