@@ -129,6 +129,57 @@ def _deduplicate(events: list[dict]) -> list[dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────
 
+def detect(candidates: list) -> list:
+    """
+    Pure classification of STS candidate pairs — no database calls.
+
+    Accepts candidate pair dicts in the shape returned by db.find_sts_candidates()
+    (or ais_factory.make_sts_pair()). Returns event dicts for pairs that meet
+    distance and SOG criteria.
+
+    Note: sanctions_hit is always False here. The run_detection() pipeline adds
+    sanctions cross-reference for both vessels via db.search_sanctions_by_mmsi —
+    that step requires a database connection and is excluded from this pure function.
+    _risk_level() is called with sanctions_hit=False accordingly.
+    """
+    events = []
+    for cand in candidates:
+        lat1, lon1 = cand.get("lat1"), cand.get("lon1")
+        lat2, lon2 = cand.get("lat2"), cand.get("lon2")
+        sog1, sog2 = cand.get("sog1", 99), cand.get("sog2", 99)
+
+        # SOG filter: at least one vessel must be slow (potential transfer)
+        if sog1 > MAX_SOG and sog2 > MAX_SOG:
+            continue
+
+        # Distance filter
+        if lat1 is None or lat2 is None:
+            continue
+        distance_km = _haversine(lat1, lon1, lat2, lon2)
+        if distance_km > STS_DISTANCE_KM:
+            continue
+
+        risk_zone = _classify_zone(lat1, lon1)
+        risk_level = _risk_level(
+            distance_km=distance_km,
+            sanctions_hit=False,   # db lookup omitted in pure function
+            risk_zone=risk_zone,
+            sog1=sog1,
+            sog2=sog2,
+        )
+        event = dict(cand)
+        event.update({
+            "distance_km": distance_km,
+            "risk_level": risk_level,
+            "risk_zone": risk_zone,
+            "sanctions_hit": False,
+            "event_ts": cand.get("ts"),  # _deduplicate() reads ev["event_ts"]; input key is "ts"
+        })
+        events.append(event)
+
+    return _deduplicate(events)
+
+
 def run_detection(
     hours_back: int = DEFAULT_HOURS_BACK,
     max_distance_km: float = STS_DISTANCE_KM,

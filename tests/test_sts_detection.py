@@ -12,10 +12,10 @@ from ais_factory import make_sts_pair
 
 # Latitude delta that yields approximately STS_DISTANCE_KM at lat 22.5
 # 1 degree latitude ≈ 111.32 km; STS_DISTANCE_KM = 0.926 km
-# Delta for ~0.9 km (just inside): 0.9 / 111320 ≈ 0.0000808 degrees
-# Delta for ~1.0 km (just outside): 1.0 / 111320 ≈ 0.0000898 degrees
-INSIDE_DELTA  = 0.0000808   # ~0.9 km — inside STS_DISTANCE_KM threshold
-OUTSIDE_DELTA = 0.0000898   # ~1.0 km — outside STS_DISTANCE_KM threshold
+# Delta for ~0.923 km (just inside): 0.0083 degrees * 111.32 km/deg ≈ 0.924 km
+# Delta for ~1.001 km (just outside): 0.0090 degrees * 111.32 km/deg ≈ 1.001 km
+INSIDE_DELTA  = 0.0083   # ~0.923 km — inside STS_DISTANCE_KM threshold
+OUTSIDE_DELTA = 0.0090   # ~1.001 km — outside STS_DISTANCE_KM threshold
 
 
 def test_detect_empty():
