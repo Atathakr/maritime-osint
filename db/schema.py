@@ -46,6 +46,8 @@ def init_db() -> None:
             _init_sqlite(c)
 
     _migrate_vessels_canonical()
+    from .scores import init_scores_tables  # noqa: WPS433 (local import avoids circular)
+    init_scores_tables()
 
 
 def _init_postgres(c) -> None:

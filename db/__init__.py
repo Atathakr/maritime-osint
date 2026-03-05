@@ -69,6 +69,11 @@ from .findings import (  # noqa: F401
     get_vessel_indicator_summary,
 )
 
-# ── Scores (Phase 2 placeholder) ──────────────────────────────────────────────
-# PLAN 01-02 step 6: stub created; no functions exported in Phase 1
-# from .scores import (...)  # noqa: F401 — Phase 2 will populate
+# ── Scores (Phase 2) ──────────────────────────────────────────────────────────
+# Plan 02-01: vessel_scores + vessel_score_history DDL and CRUD
+from .scores import (  # noqa: F401
+    init_scores_tables, upsert_vessel_score, get_vessel_score,
+    get_all_vessel_scores, mark_risk_scores_stale,
+    append_score_history, prune_score_history,
+    archive_old_ais_positions,
+)
