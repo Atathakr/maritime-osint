@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 02-pre-computed-risk-scores/02-04-PLAN.md
-last_updated: "2026-03-05T13:40:40.885Z"
+stopped_at: Completed 03-detection-test-coverage/03-01-PLAN.md
+last_updated: "2026-03-05T17:51:11.418Z"
 last_activity: 2026-03-04 — Phase 2 plans 02-01/02/03/04 written and verified
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
   percent: 57
 ---
 
@@ -37,16 +37,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
-**Current focus:** Phase 2 — Pre-Computed Risk Scores (4 plans ready — execute next)
+**Current focus:** Phase 3 — Detection Test Coverage (3 plans total, 1 complete)
 
 ## Current Position
 
-Phase: 1 of 5 complete ✅
-Phase 2: 0 of 4 plans complete (ready to execute)
-Status: Phase 2 planned — plan-checker PASSED, ready for /gsd:execute-phase 2
-Last activity: 2026-03-04 — Phase 2 plans 02-01/02/03/04 written and verified
+Phase: 2 of 5 complete ✅
+Phase 3: 1 of 3 plans complete (03-01 done, 03-02 ready to execute)
+Status: Phase 3 in progress — 03-01 complete, ready for 03-02
+Last activity: 2026-03-05 — Phase 3 plan 03-01 (test infrastructure) complete
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 02-pre-computed-risk-scores P02 | 5 | 1 tasks | 1 files |
 | Phase 02-pre-computed-risk-scores P03 | 4 | 4 tasks | 3 files |
 | Phase 02-pre-computed-risk-scores P04 | 5 | 2 tasks | 1 files |
+| Phase 03-detection-test-coverage P01 | 3 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Recent decisions affecting current work:
 - [Phase 02-pre-computed-risk-scores]: _cached_sanctioned extracted from score cache but VesselDetail display logic still runs live DB queries; only risk_score integer comes from cache for UI completeness
 - [Phase 02-pre-computed-risk-scores]: Ranking route registered before /api/vessels/<path:imo> catch-all — prevents Flask consuming 'ranking' as an IMO value
 - [Phase 02-pre-computed-risk-scores]: sanctioned_only filter applied in Python after single batch fetch — avoids additional DB round-trip
+- [Phase 03-detection-test-coverage]: conftest.py upgraded from setdefault to direct os.environ["DATABASE_URL"] = "" assignment for CI-safe env guard
+- [Phase 03-detection-test-coverage]: ais_factory.py uses plain functions not pytest fixtures — boundary tests need parametrize-friendly callables
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T13:29:21.752Z
-Stopped at: Completed 02-pre-computed-risk-scores/02-04-PLAN.md
+Last session: 2026-03-05T17:51:11.413Z
+Stopped at: Completed 03-detection-test-coverage/03-01-PLAN.md
 Resume file: None
