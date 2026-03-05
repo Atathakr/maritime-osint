@@ -283,6 +283,43 @@ def api_vessels():
     return jsonify(vessels)
 
 
+# N+1 audit (INF-1): all multi-vessel endpoints confirmed batch-query only.
+# api_vessels           → db.get_vessels() batch
+# api_map_vessels       → map_data.get_map_vessels_raw() batch JOIN
+# api_vessels_ranking   → db.get_all_vessel_scores() batch JOIN (this endpoint)
+@app.get("/api/vessels/ranking")
+@login_required
+def api_vessels_ranking():
+    """
+    Vessel ranking by pre-computed composite risk score.
+
+    Returns all vessels in vessel_scores sorted by composite_score descending.
+    Uses a single batch JOIN query — no per-vessel SELECT loops (INF-1).
+
+    Query params:
+        limit         — max vessels to return (default 100, cap 500)
+        sanctioned_only — "1" or "true" to filter to sanctioned vessels only
+    """
+    try:
+        limit = min(int(request.args.get("limit", 100)), 500)
+        sanctioned_only = request.args.get("sanctioned_only", "").lower() in ("1", "true")
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Invalid parameters: {exc}"}), 400
+
+    rows = db.get_all_vessel_scores()  # single batch JOIN — sorted DESC by composite_score
+
+    if sanctioned_only:
+        rows = [r for r in rows if r.get("is_sanctioned")]
+
+    rows = rows[:limit]
+
+    return jsonify({
+        "vessels": rows,
+        "count": len(rows),
+        "note": "Scores refresh every 15 minutes via background scheduler",
+    })
+
+
 @app.get("/api/vessels/<path:imo>")
 @login_required
 def api_vessel_detail(imo):
