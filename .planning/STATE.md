@@ -3,11 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
+stopped_at: Completed 02-pre-computed-risk-scores/02-01-PLAN.md
+last_updated: "2026-03-05T13:03:24.464Z"
+last_activity: 2026-03-04 — Phase 2 plans 02-01/02/03/04 written and verified
+progress:
+  total_phases: 5
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 4
+  percent: 57
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: ready_to_execute
 stopped_at: Phase 2 planning complete — 4 plans ready, plan-checker PASSED
 last_updated: "2026-03-04T22:00:00.000Z"
 last_activity: 2026-03-04 — Phase 2 plans 02-01 through 02-04 written and verified
 progress:
-  total_phases: 5
+  [██████░░░░] 57%
   completed_phases: 1
   total_plans: 7
   completed_plans: 3
@@ -50,6 +66,7 @@ Progress: [██░░░░░░░░] 20%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 02-pre-computed-risk-scores P01 | 5 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -71,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 02-pre-computed-risk-scores]: Staleness fallback = block + recompute inline + persist to vessel_scores; SCORE_STALENESS_MINUTES = 30 hardcoded constant in db/scores.py
 - [Phase 02-pre-computed-risk-scores]: Multi-worker double-refresh via pg_try_advisory_xact_lock(42) (transaction-level, auto-releases on commit — NOT session-level pg_try_advisory_lock); SQLite skips lock; SCHEDULER_ADVISORY_LOCK_ID = 42
 - [Phase 02-pre-computed-risk-scores]: map_data.py qualitative risk system (CRITICAL/HIGH/MEDIUM/LOW) is NOT changed in Phase 2 — map numeric score display deferred to Phase 5 (FE-2)
+- [Phase 02-pre-computed-risk-scores]: db/scores.py uses __file__-anchored _sqlite_path() — tests must use db._sqlite_path() not tmp_path/monkeypatch.chdir for correct DB isolation
 
 ### Pending Todos
 
@@ -84,6 +102,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T22:00:00.000Z
-Stopped at: Phase 2 planning complete — 4 plans verified, ready to execute
-Resume file: .planning/phases/02-pre-computed-risk-scores/
+Last session: 2026-03-05T13:03:24.459Z
+Stopped at: Completed 02-pre-computed-risk-scores/02-01-PLAN.md
+Resume file: None

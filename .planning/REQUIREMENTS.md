@@ -138,12 +138,12 @@ Based on dependencies and risk:
 | DB-3 | Phase 1 — Database Decomposition | Complete |
 | INF-3 | Phase 1 — Database Decomposition | Complete |
 | INF-4 | Phase 1 — Database Decomposition | Complete |
-| DB-1 | Phase 2 — Pre-Computed Risk Scores | Pending |
-| DB-2 | Phase 2 — Pre-Computed Risk Scores | Pending |
-| DB-4 | Phase 2 — Pre-Computed Risk Scores | Pending |
-| DB-5 | Phase 2 — Pre-Computed Risk Scores | Pending |
-| INF-1 | Phase 2 — Pre-Computed Risk Scores | Pending |
-| INF-2 | Phase 2 — Pre-Computed Risk Scores | Pending |
+| DB-1 | Phase 2 — Pre-Computed Risk Scores | Complete |
+| DB-2 | Phase 2 — Pre-Computed Risk Scores | Complete |
+| DB-4 | Phase 2 — Pre-Computed Risk Scores | Complete |
+| DB-5 | Phase 2 — Pre-Computed Risk Scores | Complete |
+| INF-1 | Phase 2 — Pre-Computed Risk Scores | Complete |
+| INF-2 | Phase 2 — Pre-Computed Risk Scores | Complete |
 | INF (detection test coverage) | Phase 3 — Detection Test Coverage | Pending |
 | SEC-1 | Phase 4 — Security Hardening | Pending |
 | SEC-2 | Phase 4 — Security Hardening | Pending |

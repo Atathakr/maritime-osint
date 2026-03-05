@@ -127,7 +127,7 @@ Phases execute in numeric order. Phases 2 and 3 can run in parallel (both depend
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Database Decomposition | 3/3 | Complete   | 2026-03-04 |
-| 2. Pre-Computed Risk Scores | 0/4 | Not started | - |
+| 2. Pre-Computed Risk Scores | 1/4 | In Progress|  |
 | 3. Detection Test Coverage | 0/3 | Not started | - |
 | 4. Security Hardening | 0/3 | Not started | - |
 | 5. Frontend UX | 0/3 | Not started | - |
