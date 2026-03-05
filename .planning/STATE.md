@@ -3,11 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
+stopped_at: Completed 03-detection-test-coverage/03-02-PLAN.md
+last_updated: "2026-03-05T17:58:54.185Z"
+last_activity: 2026-03-05 — Phase 3 plan 03-01 (test infrastructure) complete
+progress:
+  total_phases: 5
+  completed_phases: 2
+  total_plans: 10
+  completed_plans: 9
+  percent: 90
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: ready_to_execute
 stopped_at: Completed 03-detection-test-coverage/03-01-PLAN.md
 last_updated: "2026-03-05T17:51:11.418Z"
 last_activity: 2026-03-04 — Phase 2 plans 02-01/02/03/04 written and verified
 progress:
-  total_phases: 5
+  [█████████░] 90%
   completed_phases: 2
   total_plans: 10
   completed_plans: 8
@@ -37,14 +53,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
-**Current focus:** Phase 3 — Detection Test Coverage (3 plans total, 1 complete)
+**Current focus:** Phase 3 — Detection Test Coverage (3 plans total, 2 complete)
 
 ## Current Position
 
 Phase: 2 of 5 complete ✅
-Phase 3: 1 of 3 plans complete (03-01 done, 03-02 ready to execute)
-Status: Phase 3 in progress — 03-01 complete, ready for 03-02
-Last activity: 2026-03-05 — Phase 3 plan 03-01 (test infrastructure) complete
+Phase 3: 2 of 3 plans complete (03-01 done, 03-02 done, 03-03 ready to execute)
+Status: Phase 3 in progress — 03-01 and 03-02 complete, ready for 03-03
+Last activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 
 Progress: [████████░░] 80%
 
@@ -71,6 +87,7 @@ Progress: [████████░░] 80%
 | Phase 02-pre-computed-risk-scores P03 | 4 | 4 tasks | 3 files |
 | Phase 02-pre-computed-risk-scores P04 | 5 | 2 tasks | 1 files |
 | Phase 03-detection-test-coverage P01 | 3 | 2 tasks | 5 files |
+| Phase 03-detection-test-coverage P02 | 5 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -100,6 +117,9 @@ Recent decisions affecting current work:
 - [Phase 02-pre-computed-risk-scores]: sanctioned_only filter applied in Python after single batch fetch — avoids additional DB round-trip
 - [Phase 03-detection-test-coverage]: conftest.py upgraded from setdefault to direct os.environ["DATABASE_URL"] = "" assignment for CI-safe env guard
 - [Phase 03-detection-test-coverage]: ais_factory.py uses plain functions not pytest fixtures — boundary tests need parametrize-friendly callables
+- [Phase 03-detection-test-coverage]: T09 MEDIUM baseline test uses open-ocean coords (0.0, 0.0) not default Gulf of Oman coords — default last_lat=22.5 lon=57.0 is inside HIGH_RISK_ZONES causing zone upgrade to HIGH
+- [Phase 03-detection-test-coverage]: INSIDE_DELTA/OUTSIDE_DELTA corrected: plan had decimal-point error (0.0000808 should be 0.0083); actual haversine calculation: 0.926km / 111.32km_per_degree = 0.00832 degrees
+- [Phase 03-detection-test-coverage]: detect() sets event_ts from input ts key before calling _deduplicate() — _deduplicate() reads ev[event_ts] internally; omitting causes KeyError
 
 ### Pending Todos
 
@@ -113,6 +133,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T17:51:11.413Z
-Stopped at: Completed 03-detection-test-coverage/03-01-PLAN.md
+Last session: 2026-03-05T17:58:54.179Z
+Stopped at: Completed 03-detection-test-coverage/03-02-PLAN.md
 Resume file: None
