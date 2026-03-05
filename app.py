@@ -36,6 +36,7 @@ import schemas
 import loitering
 import ports
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from pydantic import ValidationError
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
@@ -51,6 +52,110 @@ AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
 # Auto-start AIS listener if API key is configured
 if AISSTREAM_API_KEY:
     ais_listener.start(AISSTREAM_API_KEY)
+
+
+# ── APScheduler — background jobs ─────────────────────────────────────────
+# _SCHEDULER_ADVISORY_LOCK_ID = 42 prevents duplicate job runs across
+# the 2 Gunicorn workers on Railway. Each worker starts its own scheduler;
+# the advisory lock ensures only one worker executes the job body per cycle.
+_SCHEDULER_ADVISORY_LOCK_ID = 42
+
+
+def _refresh_all_scores_job() -> None:
+    """
+    APScheduler entry-point: refresh composite risk scores for all vessels
+    that have an existing vessel_scores row.
+    Uses pg_try_advisory_xact_lock to prevent double-run across Gunicorn workers.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        if db._BACKEND == "postgres":
+            with db._conn() as conn:
+                c = conn.cursor()
+                c.execute("SELECT pg_try_advisory_xact_lock(%s)", (_SCHEDULER_ADVISORY_LOCK_ID,))
+                if not c.fetchone()[0]:
+                    return  # another worker is running this job
+                _do_score_refresh()
+                # advisory lock auto-released when transaction commits at end of 'with' block
+        else:
+            # SQLite (local dev): no lock needed; single process
+            _do_score_refresh()
+    except Exception:
+        log.exception("[scheduler] score refresh failed")
+
+
+def _do_score_refresh() -> None:
+    """Iterate over all known vessel_scores rows and recompute each score."""
+    import logging
+    log = logging.getLogger(__name__)
+    rows = db.get_all_vessel_scores()
+    refreshed = 0
+    for row in rows:
+        imo = row.get("imo_number")
+        if not imo:
+            continue
+        try:
+            fresh = screening.compute_vessel_score(imo)
+            db.upsert_vessel_score(imo, fresh)
+            db.append_score_history(imo, fresh)
+            refreshed += 1
+        except Exception:
+            log.exception("[scheduler] failed to refresh score for IMO %s", imo)
+    log.info("[scheduler] score refresh complete: %d vessels refreshed", refreshed)
+
+
+def _archive_ais_job() -> None:
+    """APScheduler entry-point: delete ais_positions rows older than 90 days."""
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        deleted = db.archive_old_ais_positions(days=90)
+        log.info("[scheduler] AIS archive complete: %d rows deleted", deleted)
+    except Exception:
+        log.exception("[scheduler] AIS archive failed")
+
+
+def _prune_history_job() -> None:
+    """APScheduler entry-point: delete vessel_score_history rows older than 90 days."""
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        deleted = db.prune_score_history(days=90)
+        log.info("[scheduler] history prune complete: %d rows deleted", deleted)
+    except Exception:
+        log.exception("[scheduler] history prune failed")
+
+
+# Start scheduler after db.init_db() so tables exist before first job fires.
+# BackgroundScheduler runs in a daemon thread — does not block app shutdown.
+# Both Gunicorn workers start their own scheduler instance; the advisory lock
+# in _refresh_all_scores_job prevents double-execution on PostgreSQL.
+_scheduler = BackgroundScheduler(daemon=True)
+_scheduler.add_job(
+    _refresh_all_scores_job,
+    trigger="interval",
+    minutes=15,
+    id="score_refresh",
+    replace_existing=True,
+)
+_scheduler.add_job(
+    _archive_ais_job,
+    trigger="cron",
+    hour=3,
+    minute=0,
+    id="ais_archive",
+    replace_existing=True,
+)
+_scheduler.add_job(
+    _prune_history_job,
+    trigger="cron",
+    hour=3,
+    minute=5,
+    id="history_prune",
+    replace_existing=True,
+)
+_scheduler.start()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────
