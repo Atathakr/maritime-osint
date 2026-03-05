@@ -154,13 +154,25 @@ def test_prune_score_history(monkeypatch):
 
 
 def test_score_is_stale_age():
-    """Placeholder — score_is_stale() age-based check implemented in 02-03 (screening.py)."""
-    pass  # Implemented in 02-03 (staleness logic lives in screening.py)
+    """score_is_stale() returns True when computed_at > 30 min ago; False when fresh."""
+    from datetime import datetime, timezone, timedelta
+    import screening as _screening
+
+    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=35)).isoformat()
+    assert _screening.score_is_stale({"computed_at": old_ts, "is_stale": 0}) is True
+
+    recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    assert _screening.score_is_stale({"computed_at": recent_ts, "is_stale": 0}) is False
 
 
 def test_score_is_stale_flag():
-    """Placeholder — score_is_stale() flag-based check implemented in 02-03 (screening.py)."""
-    pass  # Implemented in 02-03
+    """score_is_stale() returns True when is_stale=1, regardless of age."""
+    from datetime import datetime, timezone, timedelta
+    import screening as _screening
+
+    recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    assert _screening.score_is_stale({"computed_at": recent_ts, "is_stale": 1}) is True
+    assert _screening.score_is_stale({"computed_at": recent_ts, "is_stale": 0}) is False
 
 
 def test_mark_risk_scores_stale(monkeypatch):
