@@ -86,3 +86,57 @@ def test_detect_no_db():
     assert result[0].get("sanctions_hit") is False, (
         "Pure detect() must return sanctions_hit=False; db lookup not possible"
     )
+
+
+def test_detect_with_reappear_coords():
+    """Extra: detect() with reappear coords computes distance_km via haversine."""
+    gap = make_gap(
+        gap_hours=dark_periods.HIGH_RISK_HOURS + EPSILON,
+        last_lat=0.0, last_lon=0.0,
+        reappear_lat=0.1, reappear_lon=0.1,
+    )
+    result = dark_periods.detect([gap])
+    assert len(result) == 1
+    assert result[0]["distance_km"] is not None
+    assert result[0]["distance_km"] > 0
+
+
+def test_detect_outside_zone_no_upgrade():
+    """Extra: MEDIUM gap with coords outside all zones stays MEDIUM."""
+    gap = make_gap(gap_hours=3.0, last_lat=0.0, last_lon=0.0)
+    result = dark_periods.detect([gap])
+    assert len(result) == 1
+    assert result[0]["risk_level"] == "MEDIUM"
+    assert result[0]["risk_zone"] is None
+
+
+def test_detect_none_coords_no_zone():
+    """Extra: gap with last_lat=None has risk_zone=None and distance_km=None."""
+    gap = make_gap(gap_hours=dark_periods.HIGH_RISK_HOURS + EPSILON,
+                   last_lat=None, last_lon=None)
+    result = dark_periods.detect([gap])
+    assert len(result) == 1
+    assert result[0]["risk_zone"] is None
+    assert result[0]["distance_km"] is None
+
+
+def test_summarise_empty():
+    """Extra: summarise([]) returns zero counts."""
+    summary = dark_periods.summarise([])
+    assert summary["total"] == 0
+
+
+def test_summarise_nonempty():
+    """Extra: summarise returns correct counts for a list of periods."""
+    periods = [
+        {"risk_level": "MEDIUM", "sanctions_hit": False, "risk_zone": None},
+        {"risk_level": "HIGH", "sanctions_hit": True, "risk_zone": "Gulf of Oman"},
+        {"risk_level": "CRITICAL", "sanctions_hit": False, "risk_zone": "Gulf of Oman"},
+    ]
+    s = dark_periods.summarise(periods)
+    assert s["total"] == 3
+    assert s["medium"] == 1
+    assert s["high"] == 1
+    assert s["critical"] == 1
+    assert s["with_sanctions"] == 1
+    assert s["in_risk_zone"] == 2

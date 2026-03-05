@@ -97,3 +97,73 @@ def test_deduplication():
     assert len(result) == 1, (
         f"Two identical pairs within {sts_detection.DEDUP_HOURS}h should deduplicate to 1"
     )
+
+
+def test_detect_result_fields():
+    """Extra: detected pair has required output fields."""
+    pair = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=0.5, sog2=0.5,
+    )
+    result = sts_detection.detect([pair])
+    assert len(result) == 1
+    ev = result[0]
+    assert "distance_km" in ev
+    assert "risk_level" in ev
+    assert "risk_zone" in ev
+    assert ev["sanctions_hit"] is False
+
+
+def test_no_zone_outside_region():
+    """Extra: pair in open ocean (lat=0, lon=0) has risk_zone=None."""
+    pair = make_sts_pair(
+        lat1=0.0, lon1=0.0,
+        lat2=0.0 + INSIDE_DELTA, lon2=0.0,
+        sog1=0.5, sog2=0.5,
+    )
+    result = sts_detection.detect([pair])
+    assert len(result) == 1
+    assert result[0]["risk_zone"] is None
+
+
+def test_detect_pair_outside_dedup_window():
+    """Extra: Two identical pairs OUTSIDE DEDUP_HOURS produce 2 events."""
+    base_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    pair1 = make_sts_pair(
+        lat1=0.0, lon1=0.0,
+        lat2=0.0 + INSIDE_DELTA, lon2=0.0,
+        sog1=0.5, sog2=0.5,
+        ts=base_ts.isoformat(),
+    )
+    # Same pair, 3 hours later — outside DEDUP_HOURS (2.0)
+    pair2 = make_sts_pair(
+        lat1=0.0, lon1=0.0,
+        lat2=0.0 + INSIDE_DELTA, lon2=0.0,
+        sog1=0.5, sog2=0.5,
+        ts=(base_ts + timedelta(hours=3)).isoformat(),
+    )
+    result = sts_detection.detect([pair1, pair2])
+    assert len(result) == 2, (
+        f"Pairs outside {sts_detection.DEDUP_HOURS}h window should NOT deduplicate"
+    )
+
+
+def test_summarise_empty():
+    """Extra: summarise([]) returns zero counts."""
+    counts = sts_detection.summarise([])
+    assert counts == {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+
+
+def test_summarise_nonempty():
+    """Extra: summarise counts risk levels correctly."""
+    events = [
+        {"risk_level": "CRITICAL"},
+        {"risk_level": "HIGH"},
+        {"risk_level": "LOW"},
+    ]
+    counts = sts_detection.summarise(events)
+    assert counts["CRITICAL"] == 1
+    assert counts["HIGH"] == 1
+    assert counts["LOW"] == 1
+    assert counts["MEDIUM"] == 0
