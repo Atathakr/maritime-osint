@@ -140,3 +140,36 @@ def test_summarise_nonempty():
     assert s["critical"] == 1
     assert s["with_sanctions"] == 1
     assert s["in_risk_zone"] == 2
+
+
+# ── Extra coverage tests for _classify_zone() and _haversine() ────────────
+
+def test_classify_zone_none_returns_none():
+    """_classify_zone with None coord returns None (line 205)."""
+    result = dark_periods._classify_zone(None, 57.0)
+    assert result is None
+
+
+def test_classify_zone_open_ocean():
+    """_classify_zone with open-ocean coords returns None (line 209)."""
+    result = dark_periods._classify_zone(0.0, 0.0)
+    assert result is None
+
+
+def test_classify_zone_gulf_of_oman():
+    """_classify_zone with Gulf of Oman coords returns zone name."""
+    result = dark_periods._classify_zone(22.5, 57.0)
+    assert result == "Gulf of Oman"
+
+
+def test_haversine_none_returns_none():
+    """_haversine with None coordinate returns None (line 215)."""
+    result = dark_periods._haversine(None, 57.0, 22.6, 58.5)
+    assert result is None
+
+
+def test_haversine_valid_coords():
+    """_haversine returns positive float for valid coordinates."""
+    result = dark_periods._haversine(22.5, 57.0, 22.6, 57.0)
+    assert result is not None
+    assert result > 0

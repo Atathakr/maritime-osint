@@ -54,3 +54,35 @@ def test_zero_time_delta_ignored():
     )
     result = spoofing.detect([pair], threshold_kt=THRESHOLD)
     assert result == [], "time_delta_min=0 should be skipped (division-by-zero guard)"
+
+
+# ── Extra coverage tests ───────────────────────────────────────────────────
+
+def test_haversine_none_coord():
+    """_haversine with None coordinate returns None (line 28-29)."""
+    result = spoofing._haversine(None, 57.0, 22.6, 58.5)
+    assert result is None
+
+
+def test_detect_uses_default_threshold():
+    """detect() with no threshold_kt uses risk_config.SPEED_ANOMALY_THRESHOLD_KT."""
+    pair = make_consecutive_pair()  # default: ~157 kt — above 50 kt threshold
+    result = spoofing.detect([pair])  # no threshold_kt — uses default
+    assert len(result) == 1, "Default threshold should flag ~157 kt pair"
+
+
+def test_detect_pair_with_none_lat_skipped():
+    """Pair with None lat is skipped without error (guard clause line 66-67)."""
+    pair = make_consecutive_pair()
+    pair["lat"] = None
+    result = spoofing.detect([pair], threshold_kt=THRESHOLD)
+    assert result == [], "Pair with None lat should be skipped"
+
+
+def test_anomaly_result_has_implied_speed():
+    """Detected anomaly result dict contains implied_speed_kt field."""
+    pair = make_consecutive_pair()
+    result = spoofing.detect([pair], threshold_kt=THRESHOLD)
+    assert len(result) == 1
+    assert "implied_speed_kt" in result[0]
+    assert result[0]["implied_speed_kt"] > THRESHOLD

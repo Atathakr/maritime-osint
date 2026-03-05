@@ -90,3 +90,95 @@ def test_zone_triggers_high():
     assert result[0]["risk_level"] in ("HIGH", "CRITICAL"), (
         f"Episode in high-risk zone should be HIGH or CRITICAL, got {result[0]['risk_level']}"
     )
+
+
+# ── Extra coverage tests ───────────────────────────────────────────────────
+
+def test_classify_zone_none_lat():
+    """_classify_zone with None lat returns None (line 32)."""
+    result = loitering._classify_zone(None, 57.0)
+    assert result is None
+
+
+def test_classify_zone_open_ocean():
+    """_classify_zone with coords outside all zones returns None (line 40)."""
+    result = loitering._classify_zone(0.0, 0.0)
+    assert result is None
+
+
+def test_risk_level_medium():
+    """_risk_level returns MEDIUM for hours >= 12 with no zone (line 48)."""
+    result = loitering._risk_level(13.0, None)
+    assert result == "MEDIUM"
+
+
+def test_risk_level_high_duration():
+    """_risk_level returns HIGH for hours >= 24."""
+    result = loitering._risk_level(24.5, None)
+    assert result == "HIGH"
+
+
+def test_parse_ts_none():
+    """_parse_ts returns None for None input (line 56)."""
+    result = loitering._parse_ts(None)
+    assert result is None
+
+
+def test_parse_ts_datetime_with_tz():
+    """_parse_ts returns datetime as-is when already tz-aware (line 60)."""
+    from datetime import datetime, timezone
+    dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    result = loitering._parse_ts(dt)
+    assert result == dt
+
+
+def test_parse_ts_datetime_naive():
+    """_parse_ts attaches UTC when datetime is naive (line 58-59)."""
+    from datetime import datetime, timezone
+    dt = datetime(2024, 1, 1)
+    result = loitering._parse_ts(dt)
+    assert result.tzinfo is not None
+
+
+def test_parse_ts_invalid_string():
+    """_parse_ts returns None for unparseable string (lines 65-66)."""
+    result = loitering._parse_ts("not-a-timestamp")
+    assert result is None
+
+
+def test_high_speed_ends_episode():
+    """High-speed position after slow sequence ends the episode (lines 144-151)."""
+    from ais_factory import make_position_sequence
+    from datetime import datetime, timezone, timedelta
+    # 27 slow positions then 1 fast — episode ends cleanly
+    slow = make_position_sequence(count=27, sog=0.5, interval_minutes=30)
+    last_ts = datetime.fromisoformat(slow[-1]["position_ts"])
+    fast_row = {
+        "mmsi": "123456789",
+        "imo_number": None,
+        "vessel_name": "TEST VESSEL",
+        "lat": 22.5,
+        "lon": 57.0,
+        "sog": 10.0,  # above SOG_THRESHOLD_KT
+        "position_ts": (last_ts + timedelta(minutes=30)).isoformat(),
+    }
+    result = loitering.detect(slow + [fast_row],
+                              sog_threshold_kt=loitering.SOG_THRESHOLD_KT,
+                              min_hours=loitering.MIN_LOITER_HOURS)
+    # Episode should be saved when high-speed position encountered
+    assert len(result) >= 1
+
+
+def test_row_missing_sog_skipped():
+    """Row with missing sog is skipped (line 109)."""
+    from ais_factory import make_position_sequence
+    positions = make_position_sequence(count=27, sog=0.5, interval_minutes=30)
+    # Insert a row without sog at position 5
+    bad_row = dict(positions[5])
+    bad_row.pop("sog")
+    positions.insert(5, bad_row)
+    # Should still produce valid result — bad row is silently skipped
+    result = loitering.detect(positions,
+                              sog_threshold_kt=loitering.SOG_THRESHOLD_KT,
+                              min_hours=loitering.MIN_LOITER_HOURS)
+    assert isinstance(result, list)

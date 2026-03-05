@@ -167,3 +167,80 @@ def test_summarise_nonempty():
     assert counts["HIGH"] == 1
     assert counts["LOW"] == 1
     assert counts["MEDIUM"] == 0
+
+
+# ── Extra coverage tests for _risk_level() and _ts_to_epoch() ─────────────
+
+def test_risk_level_critical_sanctions_both_slow_zone():
+    """_risk_level: sanctions_hit + both_slow + zone = CRITICAL (line 80)."""
+    result = sts_detection._risk_level(
+        distance_km=0.5,
+        sanctions_hit=True,
+        risk_zone="Gulf of Oman",
+        sog1=0.5,
+        sog2=0.5,
+    )
+    assert result == "CRITICAL"
+
+
+def test_risk_level_high_sanctions_zone_only():
+    """_risk_level: sanctions_hit + zone (not both_slow) = HIGH (line 82)."""
+    result = sts_detection._risk_level(
+        distance_km=0.5,
+        sanctions_hit=True,
+        risk_zone="Gulf of Oman",
+        sog1=5.0,
+        sog2=5.0,
+    )
+    assert result == "HIGH"
+
+
+def test_risk_level_high_sanctions_only():
+    """_risk_level: sanctions_hit alone (no zone, no both_slow) = HIGH (line 84)."""
+    result = sts_detection._risk_level(
+        distance_km=0.5,
+        sanctions_hit=True,
+        risk_zone=None,
+        sog1=5.0,
+        sog2=5.0,
+    )
+    assert result == "HIGH"
+
+
+def test_risk_level_medium_both_slow_zone():
+    """_risk_level: both_slow + zone + no sanctions = MEDIUM (line 86)."""
+    result = sts_detection._risk_level(
+        distance_km=0.5,
+        sanctions_hit=False,
+        risk_zone="Gulf of Oman",
+        sog1=0.5,
+        sog2=0.5,
+    )
+    assert result == "MEDIUM"
+
+
+def test_ts_to_epoch_int():
+    """_ts_to_epoch handles integer input (lines 94-95)."""
+    result = sts_detection._ts_to_epoch(1000000)
+    assert result == 1000000.0
+
+
+def test_ts_to_epoch_datetime():
+    """_ts_to_epoch handles datetime input (lines 96-97)."""
+    from datetime import datetime, timezone
+    dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    result = sts_detection._ts_to_epoch(dt)
+    assert result == dt.timestamp()
+
+
+def test_ts_to_epoch_invalid_string():
+    """_ts_to_epoch returns 0.0 for unparseable string (lines 102-103)."""
+    result = sts_detection._ts_to_epoch("not-a-timestamp")
+    assert result == 0.0
+
+
+def test_detect_missing_lat_skipped():
+    """detect() skips candidate with None lat (line 157)."""
+    pair = make_sts_pair(lat1=None, lon1=57.0, lat2=22.5, lon2=57.0)
+    result = sts_detection.detect([pair])
+    assert result == [], "Pair with None lat1 should be skipped"
