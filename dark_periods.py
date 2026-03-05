@@ -44,6 +44,59 @@ HIGH_RISK_ZONES = [
 
 # ── Public interface ──────────────────────────────────────────────────────
 
+def detect(gaps: list) -> list:
+    """
+    Pure classification of AIS gap dicts — no database calls.
+
+    Accepts gap dicts in the shape returned by db.find_ais_gaps() (or ais_factory.make_gap()).
+    Returns enriched dicts for gaps that meet DARK_THRESHOLD_HOURS.
+
+    Note: sanctions_hit is always False here. The full run_detection() pipeline adds
+    sanctions cross-reference via db.search_sanctions_by_mmsi/imo — that step requires
+    a database connection and is intentionally excluded from this pure function.
+    """
+    results = []
+    for gap in gaps:
+        gap_hours = gap.get("gap_hours", 0)
+        if gap_hours < DARK_THRESHOLD_HOURS:
+            continue
+
+        # Classify risk level by duration
+        if gap_hours >= CRITICAL_HOURS:
+            risk_level = "CRITICAL"
+        elif gap_hours >= HIGH_RISK_HOURS:
+            risk_level = "HIGH"
+        else:
+            risk_level = "MEDIUM"
+
+        # Classify geographic zone by last known position
+        last_lat = gap.get("last_lat")
+        last_lon = gap.get("last_lon")
+        risk_zone = _classify_zone(last_lat, last_lon) if last_lat is not None and last_lon is not None else None
+
+        # Zone upgrade: MEDIUM gaps in high-risk zones become HIGH
+        if risk_level == "MEDIUM" and risk_zone is not None:
+            risk_level = "HIGH"
+
+        # Compute distance if reappearance coords present
+        reappear_lat = gap.get("reappear_lat")
+        reappear_lon = gap.get("reappear_lon")
+        if reappear_lat is not None and reappear_lon is not None and last_lat is not None and last_lon is not None:
+            distance_km = _haversine(last_lat, last_lon, reappear_lat, reappear_lon)
+        else:
+            distance_km = None
+
+        enriched = dict(gap)
+        enriched.update({
+            "risk_level": risk_level,
+            "risk_zone": risk_zone,
+            "distance_km": distance_km,
+            "sanctions_hit": False,  # db lookup omitted in pure function
+        })
+        results.append(enriched)
+    return results
+
+
 def run_detection(mmsi: str | None = None,
                   min_hours: float = DARK_THRESHOLD_HOURS) -> list[dict]:
     """

@@ -29,8 +29,12 @@ def test_medium_below_threshold():
 
 
 def test_medium_at_threshold():
-    """T09: Gap at DARK_THRESHOLD_HOURS + epsilon must be detected as MEDIUM."""
-    gap = make_gap(gap_hours=dark_periods.DARK_THRESHOLD_HOURS + EPSILON)
+    """T09: Gap at DARK_THRESHOLD_HOURS + epsilon must be detected as MEDIUM.
+    Uses open-ocean coords (0.0, 0.0) which are outside all high-risk zones to
+    ensure baseline MEDIUM is not upgraded by zone logic.
+    """
+    gap = make_gap(gap_hours=dark_periods.DARK_THRESHOLD_HOURS + EPSILON,
+                   last_lat=0.0, last_lon=0.0)
     result = dark_periods.detect([gap])
     assert len(result) == 1
     assert result[0]["risk_level"] == "MEDIUM", (
