@@ -301,6 +301,11 @@ def _run_ingest(source: str, fetch_fn, list_name: str) -> dict:
     try:
         entries = fetch_fn()
         inserted, updated = db.upsert_sanctions_entries(entries, list_name)
+        # Invalidate pre-computed scores for affected vessels so staleness fallback
+        # triggers on next profile load (DB-5).
+        _affected_imos = [e.get("imo_number") for e in entries if e.get("imo_number")]
+        if _affected_imos:
+            db.mark_risk_scores_stale(_affected_imos)
         db.log_ingest_complete(
             log_id, "success",
             processed=len(entries),
