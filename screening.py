@@ -364,6 +364,18 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
     Returns a VesselDetail model.
     """
     imo_clean = re.sub(r"\D", "", imo)
+
+    # ── Cached score — check freshness before running expensive queries ────
+    score_row = db.get_vessel_score(imo_clean)
+    if score_row is None or score_is_stale(score_row):
+        fresh = compute_vessel_score(imo_clean)
+        db.upsert_vessel_score(imo_clean, fresh)
+        _cached_score = fresh["composite_score"]
+        _cached_sanctioned = fresh["is_sanctioned"]
+    else:
+        _cached_score = score_row["composite_score"]
+        _cached_sanctioned = bool(score_row.get("is_sanctioned"))
+
     vessel = db.get_vessel(imo_clean)
     # For vessels tracked via AIS but not listed in the sanctions DB, fall back
     # to the ais_vessels table so the profile header has a name and MMSI.
@@ -502,23 +514,10 @@ def screen_vessel_detail(imo: str) -> schemas.VesselDetail:
             + f" (+{psc_score} pts, IND31)"
         )
 
-    # ── Composite risk score ──────────────────────────────────────────────
-    if processed_hits:
-        risk_score = 100
-    else:
-        dp        = indicator_summary.dp_count           if indicator_summary else 0
-        sts       = indicator_summary.sts_count          if indicator_summary else 0
-        sts_zones = indicator_summary.sts_risk_zone_count if indicator_summary else 0
-        spoof     = indicator_summary.spoof_count        if indicator_summary else 0
-        port      = indicator_summary.port_count         if indicator_summary else 0
-        loiter    = indicator_summary.loiter_count       if indicator_summary else 0
-        risk_score = min(
-            min(dp * 10, 40) + min(sts * 15, 45) + min(sts_zones * 5, 10)
-            + flag_score + hop_score + min(spoof * 8, 24)
-            + min(port * 20, 40) + min(loiter * 5, 15) + age_score
-            + owner_sanctions_score + psc_score,
-            99,
-        )
+    # ── Composite risk score — use pre-computed cache ─────────────────────
+    # compute_vessel_score() / staleness fallback above already persisted the score.
+    # Use _cached_score here; processed_hits is still used for sanctioned display.
+    risk_score = _cached_score
 
     return schemas.VesselDetail(
         imo_number=imo_clean,
