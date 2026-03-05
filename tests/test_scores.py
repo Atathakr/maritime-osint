@@ -1,0 +1,223 @@
+# tests/test_scores.py
+"""
+Unit tests for db/scores.py — vessel_scores and vessel_score_history CRUD.
+Requirements: DB-1, DB-2, DB-4, DB-5, INF-1, INF-2
+
+All tests use tmp_path + monkeypatch.chdir(tmp_path) + monkeypatch.setenv("DATABASE_URL", "")
++ db._init_backend() + db.init_db() to get a fresh SQLite DB per test.
+"""
+import json
+import os
+import sqlite3
+from datetime import datetime, timezone, timedelta
+
+os.environ["DATABASE_URL"] = ""  # Force SQLite; must precede any db import
+import db
+
+
+def _setup_db(tmp_path, monkeypatch):
+    """Helper: initialise a fresh SQLite DB in tmp_path and return the path."""
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.chdir(tmp_path)
+    db._init_backend()
+    db.init_db()
+    return tmp_path / "maritime_osint.db"
+
+
+def test_init_scores_tables(tmp_path, monkeypatch):
+    """DB-1: init_scores_tables() creates vessel_scores and vessel_score_history."""
+    db_path = _setup_db(tmp_path, monkeypatch)
+    conn = sqlite3.connect(str(db_path))
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    conn.close()
+    assert "vessel_scores" in tables, "vessel_scores table missing"
+    assert "vessel_score_history" in tables, "vessel_score_history table missing"
+
+
+def test_upsert_vessel_score(tmp_path, monkeypatch):
+    """DB-1: upsert_vessel_score() inserts a row; reading it back returns full dict."""
+    _setup_db(tmp_path, monkeypatch)
+    imo = "IMO1234567"
+    computed_at = datetime.now(timezone.utc).isoformat()
+    score_data = {
+        "composite_score": 42,
+        "is_sanctioned": 1,
+        "indicator_json": {"IND1": {"pts": 5, "fired": True}},
+        "computed_at": computed_at,
+    }
+    db.upsert_vessel_score(imo, score_data)
+    row = db.get_vessel_score(imo)
+    assert row is not None, "get_vessel_score returned None after upsert"
+    assert row["composite_score"] == 42
+    assert row["is_sanctioned"] == 1
+    assert isinstance(row["indicator_json"], dict), "indicator_json must be a dict, not a string"
+    assert row["computed_at"] is not None
+
+
+def test_get_vessel_score(tmp_path, monkeypatch):
+    """DB-2: get_vessel_score() returns None for missing IMO; dict for existing."""
+    _setup_db(tmp_path, monkeypatch)
+    # Missing IMO
+    result = db.get_vessel_score("IMO9999999")
+    assert result is None, "Expected None for missing IMO"
+    # Insert and retrieve
+    imo = "IMO1111111"
+    db.upsert_vessel_score(imo, {
+        "composite_score": 10,
+        "is_sanctioned": 0,
+        "indicator_json": {"IND2": {"pts": 10, "fired": True}},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    row = db.get_vessel_score(imo)
+    assert isinstance(row, dict), "Expected dict for existing IMO"
+    assert isinstance(row["indicator_json"], dict), "indicator_json must be a dict"
+
+
+def test_append_score_history(tmp_path, monkeypatch):
+    """DB-4: append_score_history() inserts a row into vessel_score_history."""
+    db_path = _setup_db(tmp_path, monkeypatch)
+    imo = "IMO2222222"
+    score_data = {
+        "composite_score": 15,
+        "is_sanctioned": 0,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    db.append_score_history(imo, score_data)
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute(
+        "SELECT COUNT(*) FROM vessel_score_history WHERE imo_number=?", (imo,)
+    ).fetchone()[0]
+    conn.close()
+    assert count == 1, f"Expected 1 history row, got {count}"
+
+
+def test_prune_score_history(tmp_path, monkeypatch):
+    """DB-4: prune_score_history(90) deletes rows older than 90 days, keeps recent."""
+    _setup_db(tmp_path, monkeypatch)
+    imo = "IMO3333333"
+    old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    # Insert old row
+    db.append_score_history(imo, {
+        "composite_score": 5,
+        "is_sanctioned": 0,
+        "computed_at": old_ts,
+    })
+    # Insert recent row
+    db.append_score_history(imo, {
+        "composite_score": 8,
+        "is_sanctioned": 0,
+        "computed_at": recent_ts,
+    })
+    deleted = db.prune_score_history(90)
+    assert deleted == 1, f"Expected 1 deleted row, got {deleted}"
+    # Confirm one row remains
+    row = None
+    with db._conn() as conn:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) as cnt FROM vessel_score_history WHERE imo_number=?", (imo,))
+        row = dict(c.fetchone())
+    assert row["cnt"] == 1, f"Expected 1 remaining row, got {row['cnt']}"
+
+
+def test_score_is_stale_age():
+    """Placeholder — score_is_stale() age-based check implemented in 02-03 (screening.py)."""
+    pass  # Implemented in 02-03 (staleness logic lives in screening.py)
+
+
+def test_score_is_stale_flag():
+    """Placeholder — score_is_stale() flag-based check implemented in 02-03 (screening.py)."""
+    pass  # Implemented in 02-03
+
+
+def test_mark_risk_scores_stale(tmp_path, monkeypatch):
+    """DB-5: mark_risk_scores_stale() sets is_stale=1 for given IMOs."""
+    _setup_db(tmp_path, monkeypatch)
+    imo = "IMO4444444"
+    db.upsert_vessel_score(imo, {
+        "composite_score": 20,
+        "is_sanctioned": 0,
+        "indicator_json": {},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    count = db.mark_risk_scores_stale([imo])
+    assert count == 1, f"Expected 1 row updated, got {count}"
+    row = db.get_vessel_score(imo)
+    assert row["is_stale"] == 1, f"Expected is_stale=1, got {row['is_stale']}"
+
+
+def test_upsert_clears_stale(tmp_path, monkeypatch):
+    """DB-1/DB-5: upsert after mark_stale resets is_stale to 0."""
+    _setup_db(tmp_path, monkeypatch)
+    imo = "IMO5555555"
+    db.upsert_vessel_score(imo, {
+        "composite_score": 30,
+        "is_sanctioned": 0,
+        "indicator_json": {},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    db.mark_risk_scores_stale([imo])
+    # Verify stale
+    row = db.get_vessel_score(imo)
+    assert row["is_stale"] == 1
+    # Upsert again — is_stale must reset to 0
+    db.upsert_vessel_score(imo, {
+        "composite_score": 35,
+        "is_sanctioned": 0,
+        "indicator_json": {},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    row = db.get_vessel_score(imo)
+    assert row["is_stale"] == 0, f"Expected is_stale=0 after upsert, got {row['is_stale']}"
+
+
+def test_get_all_vessel_scores(tmp_path, monkeypatch):
+    """DB-2: get_all_vessel_scores() returns list via single JOIN including the upserted vessel."""
+    db_path = _setup_db(tmp_path, monkeypatch)
+    imo = "IMO6666666"
+    # Insert into vessels_canonical first (JOIN requirement)
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT OR IGNORE INTO vessels_canonical "
+        "(canonical_id, entity_name, imo_number) VALUES (?, ?, ?)",
+        ("CAN001", "Test Vessel", imo),
+    )
+    conn.commit()
+    conn.close()
+    db.upsert_vessel_score(imo, {
+        "composite_score": 50,
+        "is_sanctioned": 1,
+        "indicator_json": {"IND1": {"pts": 5, "fired": True}},
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    })
+    results = db.get_all_vessel_scores()
+    assert isinstance(results, list), "Expected list from get_all_vessel_scores()"
+    imos = [r["imo_number"] for r in results]
+    assert imo in imos, f"{imo} not found in get_all_vessel_scores() result"
+
+
+def test_archive_old_ais_positions(tmp_path, monkeypatch):
+    """INF-1/INF-2: archive_old_ais_positions(90) deletes old rows, keeps recent."""
+    db_path = _setup_db(tmp_path, monkeypatch)
+    old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+    recent_ts = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(db_path))
+    # Insert old position
+    conn.execute(
+        "INSERT INTO ais_positions (mmsi, lat, lon, position_ts) VALUES (?, ?, ?, ?)",
+        ("123456789", 0.0, 0.0, old_ts),
+    )
+    # Insert recent position
+    conn.execute(
+        "INSERT INTO ais_positions (mmsi, lat, lon, position_ts) VALUES (?, ?, ?, ?)",
+        ("123456789", 1.0, 1.0, recent_ts),
+    )
+    conn.commit()
+    conn.close()
+    deleted = db.archive_old_ais_positions(90)
+    assert deleted == 1, f"Expected 1 deleted ais_positions row, got {deleted}"
+    # Confirm one row remains
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute("SELECT COUNT(*) FROM ais_positions").fetchone()[0]
+    conn.close()
+    assert count == 1, f"Expected 1 remaining ais_positions row, got {count}"

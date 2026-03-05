@@ -33,6 +33,10 @@ PUBLIC_FUNCTIONS = [
     # ingest log + stats
     "log_ingest_start", "log_ingest_complete", "get_ingest_log",
     "get_stats", "get_map_vessels_raw",
+    # scores (Phase 2)
+    "init_scores_tables", "upsert_vessel_score", "get_vessel_score",
+    "get_all_vessel_scores", "mark_risk_scores_stale",
+    "append_score_history", "prune_score_history", "archive_old_ais_positions",
 ]
 
 SEMI_PRIVATE = ["_BACKEND", "_conn", "_cursor", "_rows", "_row"]
