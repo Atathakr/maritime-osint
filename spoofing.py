@@ -37,6 +37,49 @@ def _haversine(lat1, lon1, lat2, lon2) -> float | None:
     return R * 2 * math.asin(math.sqrt(max(0.0, a)))
 
 
+# ── Pure public interface ──────────────────────────────────────────────────
+
+def detect(pairs: list, threshold_kt=None) -> list:
+    """
+    Pure classification of consecutive AIS position pairs for speed anomalies — no database calls.
+
+    Accepts pair dicts in the shape returned by db.get_consecutive_ais_pairs()
+    (or ais_factory.make_consecutive_pair()).
+
+    threshold_kt defaults to risk_config.SPEED_ANOMALY_THRESHOLD_KT if not provided.
+    Pairs with time_delta_min=0 are skipped (division-by-zero guard).
+    """
+    if threshold_kt is None:
+        threshold_kt = risk_config.SPEED_ANOMALY_THRESHOLD_KT
+
+    anomalies = []
+    for pair in pairs:
+        time_delta_min = pair.get("time_delta_min", 0)
+        if not time_delta_min or time_delta_min <= 0:
+            continue  # guard clause: undefined speed if no time elapsed
+
+        lat  = pair.get("lat")
+        lon  = pair.get("lon")
+        nlat = pair.get("next_lat")
+        nlon = pair.get("next_lon")
+
+        if any(v is None for v in (lat, lon, nlat, nlon)):
+            continue
+
+        distance_km = _haversine(lat, lon, nlat, nlon)
+        time_hours  = time_delta_min / 60.0
+        speed_kt    = (distance_km / 1.852) / time_hours  # km -> nm -> kt
+
+        if speed_kt <= threshold_kt:
+            continue
+
+        result = dict(pair)
+        result["implied_speed_kt"] = round(speed_kt, 1)
+        anomalies.append(result)
+
+    return anomalies
+
+
 # ── Public interface ───────────────────────────────────────────────────────
 
 def detect_speed_anomalies(
