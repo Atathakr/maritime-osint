@@ -1,0 +1,99 @@
+"""
+Boundary tests for sts_detection.detect() — T14 through T19.
+All fixture values reference sts_detection module constants + EPSILON.
+"""
+import sys, os
+from datetime import datetime, timezone, timedelta
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+
+import sts_detection
+from ais_factory import make_sts_pair
+
+# Latitude delta that yields approximately STS_DISTANCE_KM at lat 22.5
+# 1 degree latitude ≈ 111.32 km; STS_DISTANCE_KM = 0.926 km
+# Delta for ~0.9 km (just inside): 0.9 / 111320 ≈ 0.0000808 degrees
+# Delta for ~1.0 km (just outside): 1.0 / 111320 ≈ 0.0000898 degrees
+INSIDE_DELTA  = 0.0000808   # ~0.9 km — inside STS_DISTANCE_KM threshold
+OUTSIDE_DELTA = 0.0000898   # ~1.0 km — outside STS_DISTANCE_KM threshold
+
+
+def test_detect_empty():
+    """T14: detect([]) returns []."""
+    assert sts_detection.detect([]) == []
+
+
+def test_distance_above_threshold_not_detected():
+    """T15: Pair where distance > STS_DISTANCE_KM is NOT detected."""
+    pair = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + OUTSIDE_DELTA, lon2=57.0,
+        sog1=0.5, sog2=0.5,
+    )
+    result = sts_detection.detect([pair])
+    assert result == [], (
+        f"Pair outside {sts_detection.STS_DISTANCE_KM}km threshold should not be detected"
+    )
+
+
+def test_distance_within_threshold_detected():
+    """T16: Pair where distance <= STS_DISTANCE_KM IS detected."""
+    pair = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=0.5, sog2=0.5,
+    )
+    result = sts_detection.detect([pair])
+    assert len(result) == 1, (
+        f"Pair inside {sts_detection.STS_DISTANCE_KM}km threshold should be detected"
+    )
+
+
+def test_both_fast_not_detected():
+    """T17: Pair where both vessels > MAX_SOG is NOT detected."""
+    pair = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=sts_detection.MAX_SOG + 0.1,
+        sog2=sts_detection.MAX_SOG + 0.1,
+    )
+    result = sts_detection.detect([pair])
+    assert result == [], (
+        f"Both vessels at SOG {sts_detection.MAX_SOG + 0.1} should not be STS candidates"
+    )
+
+
+def test_one_slow_detected():
+    """T18: Pair where sog1 <= MAX_SOG qualifies as STS (sog2 may be above)."""
+    pair = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=sts_detection.MAX_SOG - 0.1,   # slow vessel
+        sog2=sts_detection.MAX_SOG + 1.0,   # fast vessel — should still count
+    )
+    result = sts_detection.detect([pair])
+    assert len(result) == 1, (
+        f"One slow vessel (sog1={sts_detection.MAX_SOG - 0.1}) should be STS candidate"
+    )
+
+
+def test_deduplication():
+    """T19: Two identical pairs within DEDUP_HOURS are deduplicated to 1 event."""
+    base_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    pair1 = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=0.5, sog2=0.5,
+        ts=base_ts.isoformat(),
+    )
+    # Same pair, 1 hour later — within DEDUP_HOURS (2.0)
+    pair2 = make_sts_pair(
+        lat1=22.5, lon1=57.0,
+        lat2=22.5 + INSIDE_DELTA, lon2=57.0,
+        sog1=0.5, sog2=0.5,
+        ts=(base_ts + timedelta(hours=1)).isoformat(),
+    )
+    result = sts_detection.detect([pair1, pair2])
+    assert len(result) == 1, (
+        f"Two identical pairs within {sts_detection.DEDUP_HOURS}h should deduplicate to 1"
+    )
