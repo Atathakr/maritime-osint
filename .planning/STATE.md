@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 04-security-hardening/04-01-PLAN.md
-last_updated: "2026-03-09T14:43:18.942Z"
+stopped_at: "Completed 04-security-hardening/04-02-PLAN.md (checkpoint:human-verify pending)"
+last_updated: "2026-03-09T14:54:01.248Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 100
 ---
 
@@ -106,6 +106,7 @@ Progress: [████████░░] 80%
 | Phase 03-detection-test-coverage P02 | 5 | 2 tasks | 4 files |
 | Phase 03-detection-test-coverage P03 | 10 | 2 tasks | 8 files |
 | Phase 04-security-hardening P01 | 2 | 2 tasks | 2 files |
+| Phase 04-security-hardening P02 | 7 | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,10 @@ Recent decisions affecting current work:
 - [Phase 03-detection-test-coverage]: detect() added as thin pure wrapper in loitering.py and spoofing.py; test_detection_mocked.py consolidates mock-based coverage for all DB-touching functions across all 5 detection modules
 - [Phase 04-security-hardening]: app_client fixture uses function scope so Flask-Limiter counters reset between rate-limit tests T01/T02
 - [Phase 04-security-hardening]: Stubs use pytest.fail() not NotImplementedError — produces FAILED not ERROR, giving clean exit code 1 for Wave 0
+- [Phase 04-security-hardening]: Flask-Limiter 4.x: storage_uri passed via app.config[RATELIMIT_STORAGE_URI] not as init_app() kwarg
+- [Phase 04-security-hardening]: wntrblm flask-talisman requires content_security_policy_report_uri when report_only=True; added /csp-report no-op endpoint
+- [Phase 04-security-hardening]: Flask-WTF csrf.exempt() registers views in _exempt_views set by module.qualname string, not _csrf_exempt attribute
+- [Phase 04-security-hardening]: Talisman HSTS only set for HTTPS requests (request.is_secure or X-Forwarded-Proto: https); tests must simulate HTTPS
 
 ### Pending Todos
 
@@ -154,6 +159,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T14:43:18.937Z
-Stopped at: Completed 04-security-hardening/04-01-PLAN.md
+Last session: 2026-03-09T14:54:01.242Z
+Stopped at: Completed 04-security-hardening/04-02-PLAN.md (checkpoint:human-verify pending)
 Resume file: None
