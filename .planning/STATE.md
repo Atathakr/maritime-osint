@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 03-detection-test-coverage/03-03-PLAN.md
-last_updated: "2026-03-09T14:11:39.492Z"
+stopped_at: Completed 04-security-hardening/04-01-PLAN.md
+last_updated: "2026-03-09T14:43:18.942Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 11
   percent: 100
 ---
 
@@ -105,6 +105,7 @@ Progress: [████████░░] 80%
 | Phase 03-detection-test-coverage P01 | 3 | 2 tasks | 5 files |
 | Phase 03-detection-test-coverage P02 | 5 | 2 tasks | 4 files |
 | Phase 03-detection-test-coverage P03 | 10 | 2 tasks | 8 files |
+| Phase 04-security-hardening P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,8 @@ Recent decisions affecting current work:
 - [Phase 03-detection-test-coverage]: INSIDE_DELTA/OUTSIDE_DELTA corrected: plan had decimal-point error (0.0000808 should be 0.0083); actual haversine calculation: 0.926km / 111.32km_per_degree = 0.00832 degrees
 - [Phase 03-detection-test-coverage]: detect() sets event_ts from input ts key before calling _deduplicate() — _deduplicate() reads ev[event_ts] internally; omitting causes KeyError
 - [Phase 03-detection-test-coverage]: detect() added as thin pure wrapper in loitering.py and spoofing.py; test_detection_mocked.py consolidates mock-based coverage for all DB-touching functions across all 5 detection modules
+- [Phase 04-security-hardening]: app_client fixture uses function scope so Flask-Limiter counters reset between rate-limit tests T01/T02
+- [Phase 04-security-hardening]: Stubs use pytest.fail() not NotImplementedError — produces FAILED not ERROR, giving clean exit code 1 for Wave 0
 
 ### Pending Todos
 
@@ -151,6 +154,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T18:11:53.706Z
-Stopped at: Completed 03-detection-test-coverage/03-03-PLAN.md
+Last session: 2026-03-09T14:43:18.937Z
+Stopped at: Completed 04-security-hardening/04-01-PLAN.md
 Resume file: None

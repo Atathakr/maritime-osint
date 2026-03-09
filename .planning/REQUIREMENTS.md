@@ -145,10 +145,10 @@ Based on dependencies and risk:
 | INF-1 | Phase 2 — Pre-Computed Risk Scores | Complete |
 | INF-2 | Phase 2 — Pre-Computed Risk Scores | Complete |
 | INF (detection test coverage) | Phase 3 — Detection Test Coverage | Pending |
-| SEC-1 | Phase 4 — Security Hardening | Pending |
-| SEC-2 | Phase 4 — Security Hardening | Pending |
-| SEC-3 | Phase 4 — Security Hardening | Pending |
-| SEC-4 | Phase 4 — Security Hardening | Pending |
+| SEC-1 | Phase 4 — Security Hardening | Complete |
+| SEC-2 | Phase 4 — Security Hardening | Complete |
+| SEC-3 | Phase 4 — Security Hardening | Complete |
+| SEC-4 | Phase 4 — Security Hardening | Complete |
 | SEC-5 | Phase 4 — Security Hardening | Pending |
 | FE-1 | Phase 5 — Frontend UX | Pending |
 | FE-2 | Phase 5 — Frontend UX | Pending |
