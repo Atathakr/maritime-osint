@@ -19,10 +19,10 @@ flagged, and trust that the data is fresh and the application is hardened.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Database Decomposition** - Split db.py into db/ package with re-exports; enforce SECRET_KEY; remove unused Anthropic SDK. Zero behavior change. (completed 2026-03-04)
-- [x] **Phase 2: Pre-Computed Risk Scores** - Add vessel_scores table with APScheduler refresh; score history; staleness fallback; N+1 elimination; AIS archival. (completed 2026-03-05)
-- [x] **Phase 3: Detection Test Coverage** - Extract pure detect() functions from all 5 detection modules; pytest suite with synthetic AIS fixtures; conftest guards. (completed 2026-03-05)
-- [ ] **Phase 4: Security Hardening** - Flask-Limiter on login (PostgreSQL backend + ProxyFix); CSRF on login only; flask-talisman (CSP report-only then enforced); CodeQL dismissals.
+- [x] **Phase 1: Database Decomposition** - Split db.py into db/ package with re-exports; enforce SECRET_KEY; remove unused Anthropic SDK. Zero behavior change. (completed 2026-03-04)
+- [x] **Phase 2: Pre-Computed Risk Scores** - Add vessel_scores table with APScheduler refresh; score history; staleness fallback; N+1 elimination; AIS archival. (completed 2026-03-05)
+- [x] **Phase 3: Detection Test Coverage** - Extract pure detect() functions from all 5 detection modules; pytest suite with synthetic AIS fixtures; conftest guards. (completed 2026-03-05)
+- [ ] **Phase 4: Security Hardening** - Flask-Limiter on login (Redis backend + ProxyFix); CSRF on login only; flask-talisman (CSP report-only then enforced); CodeQL dismissals.
 - [ ] **Phase 5: Frontend UX** - Vessel ranking table; numeric scores everywhere; freshness stamps; indicator breakdown; vessel permalink; CSV export.
 
 ## Phase Details
@@ -88,17 +88,17 @@ Plans:
 **Requirements**: SEC-1, SEC-2, SEC-3, SEC-4, SEC-5
 **Complexity**: M
 **Success Criteria** (what must be TRUE):
-  1. The /login endpoint returns 429 after 10 POST attempts per minute from a single IP; the limit counter persists across Railway deploys and Gunicorn worker restarts (stored in PostgreSQL, not memory).
-  2. All /api/* POST endpoints continue to accept requests without CSRF tokens; only /login and /logout require CSRF validation.
+  1. The /login endpoint returns 429 after 10 POST attempts per minute from a single IP; the limit counter persists across Railway deploys and Gunicorn worker restarts (stored in Redis, not memory).
+  2. All /api/* POST endpoints continue to accept requests without CSRF tokens; only /login requires CSRF validation.
   3. Browser DevTools shows HSTS, X-Frame-Options: DENY, and X-Content-Type-Options: nosniff headers on every response.
-  4. The dashboard renders correctly with CSP enforcement enabled (no browser console CSP violations); all inline scripts have been moved to static/ JS files.
+  4. The dashboard renders correctly with CSP enforcement enabled (no browser console CSP violations); template audit confirmed 0 inline scripts — no migration needed.
   5. All 7 py/sql-injection CodeQL alerts in GitHub Security tab show "Dismissed" status with rationale "Backend-agnostic placeholder variable, not user data."
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Audit all templates for inline <script> tags and {{ data | tojson }} patterns; move inline JS to static/ files; verify dashboard renders intact
-- [ ] 04-02: Create security.py with init_security(app); add Flask-Limiter (PostgreSQL storage_uri, ProxyFix); add CSRFProtect with explicit /api/* exemptions; deploy CSP in report-only mode to Railway and check browser console
-- [ ] 04-03: Enable CSP enforcement after template audit passes; verify HSTS at max_age=300; dismiss 7 CodeQL false positives via GitHub Security tab with documented rationale
+- [ ] 04-01-PLAN.md — Test stubs (T01-T12) + app_client fixture; all stubs fail (Wave 0/RED phase)
+- [ ] 04-02-PLAN.md — security.py (Flask-Limiter Redis, CSRFProtect, Talisman report-only) + app.py wiring + login.html csrf_token; Railway deploy checkpoint
+- [ ] 04-03-PLAN.md — Flip CSP to enforcement; dismiss 7 CodeQL py/sql-injection alerts via gh CLI
 
 ### Phase 5: Frontend UX
 **Goal**: Make the dashboard credible to maritime analysts — vessels ranked by risk score, numeric scores visible everywhere, indicator evidence showing why each vessel is flagged, freshness stamps on all data, and a vessel permalink plus CSV export.
@@ -129,5 +129,5 @@ Phases execute in numeric order. Phases 2 and 3 can run in parallel (both depend
 | 1. Database Decomposition | 3/3 | Complete   | 2026-03-04 |
 | 2. Pre-Computed Risk Scores | 4/4 | Complete   | 2026-03-05 |
 | 3. Detection Test Coverage | 3/3 | Complete   | 2026-03-05 |
-| 4. Security Hardening | 0/3 | Not started | - |
+| 4. Security Hardening | 0/3 | Planned    |  |
 | 5. Frontend UX | 0/3 | Not started | - |
