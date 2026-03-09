@@ -149,7 +149,7 @@ Based on dependencies and risk:
 | SEC-2 | Phase 4 — Security Hardening | Complete |
 | SEC-3 | Phase 4 — Security Hardening | Complete |
 | SEC-4 | Phase 4 — Security Hardening | Complete |
-| SEC-5 | Phase 4 — Security Hardening | Pending |
+| SEC-5 | Phase 4 — Security Hardening | Complete |
 | FE-1 | Phase 5 — Frontend UX | Pending |
 | FE-2 | Phase 5 — Frontend UX | Pending |
 | FE-3 | Phase 5 — Frontend UX | Pending |
