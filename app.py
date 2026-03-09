@@ -3,9 +3,13 @@
 import os
 import sys
 
+# Load .env for local dev (no-op in production where env vars are set by the platform).
+# Set DOTENV_DISABLED=1 to suppress this (used by test_inf4_startup.py subprocess tests).
+if not os.environ.get("DOTENV_DISABLED"):
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(override=True)
+
 # ── Startup enforcement — must run before any heavy imports ──────────────────
-# These checks run before load_dotenv() so that a .env file cannot mask a
-# missing env var in a production deployment (e.g. Railway, Docker).
 _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
     print("[maritime-osint] SECRET_KEY is required. Set it in your environment or .env file. See .env.example.")

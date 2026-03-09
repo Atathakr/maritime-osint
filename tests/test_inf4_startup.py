@@ -6,8 +6,23 @@ import os
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# On Windows, user site-packages requires APPDATA to be discoverable.
+# Pass through APPDATA (and USERPROFILE as fallback) so the subprocess
+# can find packages installed to the user site-packages directory.
+_BASE_ENV = {
+    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+    "DOTENV_DISABLED": "1",  # prevent load_dotenv from masking missing env vars in subprocess
+}
+if os.environ.get("APPDATA"):
+    _BASE_ENV["APPDATA"] = os.environ["APPDATA"]
+if os.environ.get("USERPROFILE"):
+    _BASE_ENV["USERPROFILE"] = os.environ["USERPROFILE"]
+if os.environ.get("SYSTEMROOT"):
+    _BASE_ENV["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+
+
 def test_missing_secret_key():
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "APP_PASSWORD": "test"}
+    env = {**_BASE_ENV, "APP_PASSWORD": "test"}
     result = subprocess.run(
         [sys.executable, "app.py"],
         capture_output=True,
@@ -21,7 +36,7 @@ def test_missing_secret_key():
     )
 
 def test_missing_app_password():
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "SECRET_KEY": "test-secret"}
+    env = {**_BASE_ENV, "SECRET_KEY": "test-secret"}
     result = subprocess.run(
         [sys.executable, "app.py"],
         capture_output=True,
