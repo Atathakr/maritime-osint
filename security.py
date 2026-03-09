@@ -80,11 +80,9 @@ def init_security(app):
     # plain HTTP internally. Setting force_https=True causes infinite redirects.
     # strict_transport_security=True + max_age=300: tells browsers to use HTTPS
     # directly (5 min initially; increase to 31536000 after confirming stability).
-    # content_security_policy_report_only=True: Plan 02 audit mode — CSP
-    # violations are reported to browser console but NOT blocked. The wntrblm
-    # fork of flask-talisman requires content_security_policy_report_uri when
-    # report_only=True, so we point it at /csp-report (a no-op POST endpoint).
-    # Flip content_security_policy_report_only to False in Plan 04-03 to enforce.
+    # content_security_policy_report_only=False: Plan 04-03 enforcement mode —
+    # CSP violations are now blocked (not just reported). Plan 04-02 confirmed
+    # zero violations in report-only mode before flipping this flag.
     Talisman(
         app,
         force_https=False,
@@ -92,6 +90,5 @@ def init_security(app):
         strict_transport_security_max_age=300,
         frame_options="DENY",
         content_security_policy=_CSP,
-        content_security_policy_report_only=True,
-        content_security_policy_report_uri="/csp-report",
+        content_security_policy_report_only=False,
     )
