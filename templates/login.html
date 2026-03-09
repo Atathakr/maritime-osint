@@ -41,6 +41,7 @@
     <h1>MARITIME OSINT</h1>
     <p>Sanctions &amp; Shadow Fleet Intelligence Platform</p>
     <form method="POST" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="password" name="password" placeholder="Access password" autofocus>
       <button type="submit">Enter</button>
       {% if error %}<p class="error">{{ error }}</p>{% endif %}

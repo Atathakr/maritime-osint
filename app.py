@@ -21,6 +21,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import db
 import ingest
@@ -39,12 +40,16 @@ import ports
 from apscheduler.schedulers.background import BackgroundScheduler
 from pydantic import ValidationError
 
+from security import limiter, csrf, init_security
+
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = _secret_key
 
 db.init_db()
+init_security(app)
 
 APP_PASSWORD = _app_password
 AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
@@ -185,6 +190,7 @@ def login():
 
 
 @app.post("/login")
+@limiter.limit("10 per minute")
 def login_post():
     if request.form.get("password", "") == APP_PASSWORD:
         session["authenticated"] = True
@@ -198,11 +204,25 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.errorhandler(429)
+def ratelimit_exceeded(e):
+    return jsonify({"error": "Too many login attempts. Try again in 1 minute."}), 429
+
+
 # ── Health ────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.post("/csp-report")
+@csrf.exempt
+def csp_report():
+    """Receive CSP violation reports (report-only mode in Plan 04-02).
+    Reports are currently discarded — add logging in a future pass if needed.
+    """
+    return "", 204
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────
@@ -224,6 +244,7 @@ def api_stats():
 # ── Screening ─────────────────────────────────────────────────────────────
 
 @app.post("/api/screen")
+@csrf.exempt
 @login_required
 def api_screen():
     """Screen a vessel by IMO, MMSI, or name against all sanctions lists."""
@@ -362,6 +383,7 @@ def _run_ingest(source: str, fetch_fn, list_name: str) -> dict:
 
 
 @app.post("/api/ingest/ofac")
+@csrf.exempt
 @login_required
 def api_ingest_ofac():
     """Download and ingest the OFAC SDN vessel list (synchronous, ~5–15 s)."""
@@ -371,6 +393,7 @@ def api_ingest_ofac():
 
 
 @app.post("/api/ingest/opensanctions")
+@csrf.exempt
 @login_required
 def api_ingest_opensanctions():
     """
@@ -387,6 +410,7 @@ def api_ingest_opensanctions():
 
 
 @app.post("/api/ingest/psc/<source>")
+@csrf.exempt
 @login_required
 def api_ingest_psc(source):
     """
@@ -422,6 +446,7 @@ def api_ingest_log():
 # ── AIS Listener ──────────────────────────────────────────────────────────
 
 @app.post("/api/ais/start")
+@csrf.exempt
 @login_required
 def api_ais_start():
     """Start the AIS WebSocket listener. Requires AISSTREAM_API_KEY in body or env."""
@@ -434,6 +459,7 @@ def api_ais_start():
 
 
 @app.post("/api/ais/stop")
+@csrf.exempt
 @login_required
 def api_ais_stop():
     """Stop the AIS WebSocket listener."""
@@ -489,6 +515,7 @@ def api_vessel_track(mmsi):
 # ── Dark Periods ───────────────────────────────────────────────────────────
 
 @app.post("/api/dark-periods/detect")
+@csrf.exempt
 @login_required
 def api_dark_periods_detect():
     """
@@ -533,6 +560,7 @@ def api_dark_periods():
 # ── NOAA Ingest ────────────────────────────────────────────────────────────
 
 @app.post("/api/ingest/noaa")
+@csrf.exempt
 @login_required
 def api_ingest_noaa():
     """
@@ -568,6 +596,7 @@ def api_ingest_noaa():
 # ── STS Detection ─────────────────────────────────────────────────────────
 
 @app.post("/api/sts/detect")
+@csrf.exempt
 @login_required
 def api_sts_detect():
     """
@@ -612,6 +641,7 @@ def api_sts_events():
 # ── Loitering Detection ───────────────────────────────────────────────────
 
 @app.post("/api/ais/detect-loitering")
+@csrf.exempt
 @login_required
 def api_detect_loitering():
     """
@@ -629,6 +659,7 @@ def api_detect_loitering():
 # ── Sanctioned Port Detection ─────────────────────────────────────────────
 
 @app.post("/api/ports/detect-calls")
+@csrf.exempt
 @login_required
 def api_detect_port_calls():
     """
@@ -645,6 +676,7 @@ def api_detect_port_calls():
 # ── AIS Anomaly Detection ─────────────────────────────────────────────────
 
 @app.post("/api/ais/detect-anomalies")
+@csrf.exempt
 @login_required
 def api_detect_anomalies():
     """
@@ -693,6 +725,7 @@ def api_map_vessels():
 # ── Reconciliation ────────────────────────────────────────────────────────
 
 @app.post("/api/reconcile")
+@csrf.exempt
 @login_required
 def api_reconcile():
     """
