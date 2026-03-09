@@ -30,3 +30,25 @@ def sqlite_db():
     db._init_backend()
     db.init_db()
     return db._sqlite_path()
+
+
+@pytest.fixture(scope="function")
+def app_client():
+    """
+    Flask test client with security extensions initialized (Phase 4).
+
+    Scope is function (not session) so that Flask-Limiter state does not bleed
+    between rate-limit tests. SECRET_KEY and APP_PASSWORD are set before importing
+    app because Phase 1 enforces them at module import time via sys.exit(1).
+
+    WTF_CSRF_ENABLED is disabled so test_login_requires_csrf_token can test the
+    uninstrumented path separately. The limiter storage uses the in-memory backend
+    so tests never need Redis or PostgreSQL.
+    """
+    os.environ.setdefault("SECRET_KEY", "test-secret-key-32bytes-xxxxxxxxxxx")
+    os.environ.setdefault("APP_PASSWORD", "testpass")
+    from app import app as flask_app
+    flask_app.config["TESTING"] = True
+    flask_app.config["WTF_CSRF_ENABLED"] = False
+    with flask_app.test_client() as client:
+        yield client
