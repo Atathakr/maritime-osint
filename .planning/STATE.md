@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 05-frontend-ux/05-01-PLAN.md
-last_updated: "2026-03-10T00:26:30.499Z"
+stopped_at: Completed 05-frontend-ux/05-03-PLAN.md
+last_updated: "2026-03-10T00:33:07.020Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 100
 ---
 
@@ -111,6 +111,7 @@ Progress: [████████░░] 80%
 | Phase 05-frontend-ux P00 | 1 | 1 tasks | 1 files |
 | Phase 05-frontend-ux P02 | 5 | 3 tasks | 8 files |
 | Phase 05-frontend-ux P05-01 | 6 | 3 tasks | 4 files |
+| Phase 05-frontend-ux P03 | 4 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,9 @@ Recent decisions affecting current work:
 - [Phase 05-frontend-ux]: Used session_transaction() for test auth instead of POST /login — POST login returned 302 even after successful form submit; session_transaction() directly sets session[authenticated]=True, consistent with test_vessel_permalink pattern
 - [Phase 05-frontend-ux]: Score data embedded server-side via <script type='application/json'> — avoids second API round-trip, CSP safe
 - [Phase 05-frontend-ux]: test_vessel_permalink uses session_transaction() not form POST — APP_PASSWORD in .env overrides conftest setdefault
+- [Phase 05-frontend-ux]: session_transaction() used for FE-4/FE-6 test auth — POST /login returns 302 even on success in test env (same pattern as FE-1/FE-3/FE-5)
+- [Phase 05-frontend-ux]: evidence_count in CSV derived by counting indicator_json dict values where fired=True — consistent with indicator_json key-existence semantics
+- [Phase 05-frontend-ux]: INDICATOR_META passed to all vessel_profile render_template calls including 404 path to prevent Jinja2 KeyError
 
 ### Pending Todos
 
@@ -170,6 +174,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-10T00:26:30.491Z
-Stopped at: Completed 05-frontend-ux/05-01-PLAN.md
+Last session: 2026-03-10T00:33:07.014Z
+Stopped at: Completed 05-frontend-ux/05-03-PLAN.md
 Resume file: None
