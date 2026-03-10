@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 04-security-hardening/04-03-PLAN.md
-last_updated: "2026-03-09T20:35:26.141Z"
+stopped_at: Completed 05-frontend-ux/05-00-PLAN.md
+last_updated: "2026-03-10T00:18:19.821Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 17
+  completed_plans: 14
   percent: 100
 ---
 
@@ -108,6 +108,7 @@ Progress: [████████░░] 80%
 | Phase 04-security-hardening P01 | 2 | 2 tasks | 2 files |
 | Phase 04-security-hardening P02 | 7 | 1 tasks | 5 files |
 | Phase 04-security-hardening P03 | 2 | 2 tasks | 1 files |
+| Phase 05-frontend-ux P00 | 1 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,8 @@ Recent decisions affecting current work:
 - [Phase 04-security-hardening]: Talisman HSTS only set for HTTPS requests (request.is_secure or X-Forwarded-Proto: https); tests must simulate HTTPS
 - [Phase 04-security-hardening]: py/sql-injection CodeQL alerts anticipated (7 expected) never materialized — CodeQL found 0 such alerts; SEC-5 vacuously satisfied
 - [Phase 04-security-hardening]: content_security_policy_report_uri removed from Talisman init — only required in report-only mode; enforcement mode does not send violation reports
+- [Phase 05-frontend-ux]: Phase 5 follows same Wave 0 stub pattern as Phase 4: pytest.fail() stubs for Nyquist compliance before implementation begins
+- [Phase 05-frontend-ux]: app_client fixture (function scope) used for all 6 FE stubs — avoids sqlite_db dependency, function scope resets Flask-Limiter counters
 
 ### Pending Todos
 
@@ -162,6 +165,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-09T20:31:38.328Z
-Stopped at: Completed 04-security-hardening/04-03-PLAN.md
+Last session: 2026-03-10T00:18:19.814Z
+Stopped at: Completed 05-frontend-ux/05-00-PLAN.md
 Resume file: None
