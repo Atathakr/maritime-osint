@@ -1,10 +1,9 @@
 """
-tests/test_fe.py — Phase 5 Frontend UX test stubs (Wave 0 / RED phase).
+tests/test_fe.py — Phase 5 Frontend UX tests (FE-1 through FE-6).
 
-All tests use pytest.fail() so the suite exits with code 1 (FAILED)
-not code 2 (ERROR). This is the Wave 0 RED state per 05-VALIDATION.md.
+Tests verify the ranking API, map score integration, staleness flags,
+indicator breakdown, vessel permalink, and CSV export routes.
 """
-import pytest
 
 
 def test_ranking_sort(app_client):
@@ -61,8 +60,19 @@ def test_stale_flag(app_client):
 
 
 def test_indicator_json(app_client):
-    """FE-4: indicator_json present in /api/vessels/ranking response."""
-    pytest.fail("stub — implement in plan 05-03")
+    """FE-4: indicator_json in /api/vessels/ranking response is a dict (not JSON string)."""
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+    resp = app_client.get("/api/vessels/ranking")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    vessels = data.get("vessels", [])
+    for v in vessels:
+        assert "indicator_json" in v, f"indicator_json missing from row: {list(v.keys())}"
+        ij = v["indicator_json"]
+        assert isinstance(ij, dict), (
+            f"indicator_json must be dict (not string), got {type(ij).__name__}"
+        )
 
 
 def test_vessel_permalink(app_client):
@@ -87,5 +97,33 @@ def test_vessel_permalink(app_client):
 
 
 def test_csv_export(app_client):
-    """FE-6: GET /export/vessels.csv returns text/csv with correct column headers."""
-    pytest.fail("stub — implement in plan 05-03")
+    """FE-6: GET /export/vessels.csv returns text/csv with correct headers."""
+    # Unauthenticated → redirect
+    resp_unauth = app_client.get("/export/vessels.csv", follow_redirects=False)
+    assert resp_unauth.status_code in (301, 302), (
+        f"Expected redirect for unauthenticated access, got {resp_unauth.status_code}"
+    )
+
+    # Log in via session_transaction (POST /login returns 302 even on success in test env)
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    resp = app_client.get("/export/vessels.csv")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    assert "text/csv" in resp.content_type, (
+        f"Expected text/csv content type, got {resp.content_type}"
+    )
+
+    # Parse header row
+    body = resp.data.decode("utf-8")
+    lines = body.strip().splitlines()
+    assert len(lines) >= 1, "CSV response must have at least a header row"
+
+    header = lines[0]
+    expected_cols = [
+        "vessel_name", "imo", "mmsi", "flag",
+        "composite_score", "risk_level", "evidence_count",
+        "computed_at", "is_stale",
+    ]
+    for col in expected_cols:
+        assert col in header, f"Column '{col}' missing from CSV header: {header}"
