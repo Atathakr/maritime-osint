@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
-stopped_at: "Completed 06-00-PLAN.md"
+stopped_at: "Completed 06-01-PLAN.md"
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Plan 6-00 complete; test stubs created; ready for Plan 6-01
+last_activity: 2026-03-10 — Plan 6-01 complete; HIST-01 and HIST-02 implemented; 155 tests passing
 progress:
   total_phases: 10
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 6 — Score History Infrastructure (Executing)
-Plan: 06-01 (Wave 1, not started)
-Status: Plan 6-00 complete — test stubs created; next action is Plan 6-01 (Wave 1)
-Last activity: 2026-03-10 — Plan 6-00 executed; tests/test_hist.py created with 4 failing stubs (HIST-01, HIST-02)
+Phase: 6 — Score History Infrastructure (Complete)
+Plan: 06-01 complete — HIST-01 and HIST-02 implemented; all 4 acceptance tests pass
+Status: Phase 6 complete; ready for Phase 7 (alerts) planning
+Last activity: 2026-03-10 — Plan 6-01 executed; vessel_score_history migrated, change-detection added, GET /api/vessels/<imo>/history live
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## Accumulated Context
 
@@ -77,6 +77,13 @@ Progress: [██████████] 95%
 - [Plan 06-00]: Four stubs defined covering HIST-01 (test_history_row_written, test_no_spurious_row) and HIST-02 (test_history_endpoint, test_history_endpoint_404)
 - [Plan 06-00]: IMO8000001+ range reserved for Phase 6 tests to avoid fixture collisions with Phases 2-5
 - [Plan 06-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest
+
+### Decisions from Plan 6-01 (GREEN — Implementation)
+
+- [Plan 06-01]: append_score_history() derives risk_level internally (not from caller) — backward-compatible with test_scores.py calls that omit risk_level and indicator_json
+- [Plan 06-01]: _score_changed() compares composite_score, is_sanctioned, and indicator_json (normalised to dict) — both sides normalised before comparison
+- [Plan 06-01]: GET /api/vessels/<imo>/history registered before <path:imo> catch-all in app.py to prevent Flask route shadowing
+- [Plan 06-01]: API exposes computed_at as recorded_at for downstream consumers (alert generation, trend chart)
 
 ### Pending Todos
 
