@@ -8,18 +8,52 @@ import pytest
 
 
 def test_ranking_sort(app_client):
-    """FE-1: /api/vessels/ranking returns vessels sorted by composite_score desc."""
-    pytest.fail("stub — implement in plan 05-02")
+    """FE-1: /api/vessels/ranking returns JSON with vessels list when logged in."""
+    # Unauthenticated → redirect
+    resp_unauth = app_client.get("/api/vessels/ranking", follow_redirects=False)
+    assert resp_unauth.status_code in (301, 302), (
+        f"Expected redirect for unauthenticated access, got {resp_unauth.status_code}"
+    )
+
+    # Log in
+    app_client.post("/login", data={"password": "testpass"}, follow_redirects=True)
+
+    resp = app_client.get("/api/vessels/ranking")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.get_json()
+    assert "vessels" in data, f"Missing 'vessels' key in response: {data.keys()}"
+    assert isinstance(data["vessels"], list), "vessels must be a list"
+
+    # If there are vessels, verify score order (descending)
+    vessels = data["vessels"]
+    if len(vessels) >= 2:
+        scores = [v.get("composite_score", 0) or 0 for v in vessels]
+        assert scores == sorted(scores, reverse=True), (
+            f"Vessels not sorted by score desc: {scores[:5]}"
+        )
 
 
 def test_map_data_score(app_client):
-    """FE-2: Map data dict includes composite_score field (not None by default)."""
-    pytest.fail("stub — implement in plan 05-02")
+    """FE-2: get_map_vessels() result dicts include composite_score field."""
+    import map_data
+    results = map_data.get_map_vessels(hours=48)
+    assert isinstance(results, list), "get_map_vessels() must return a list"
+    # Verify composite_score key present in all rows (value may be None)
+    for v in results:
+        assert "composite_score" in v, (
+            f"composite_score key missing from map vessel dict: {list(v.keys())}"
+        )
 
 
 def test_stale_flag(app_client):
-    """FE-3: is_stale flag propagates correctly in ranking API response."""
-    pytest.fail("stub — implement in plan 05-02")
+    """FE-3: is_stale field present in ranking API response rows."""
+    app_client.post("/login", data={"password": "testpass"}, follow_redirects=True)
+    resp = app_client.get("/api/vessels/ranking")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    vessels = data.get("vessels", [])
+    for v in vessels:
+        assert "is_stale" in v, f"is_stale missing from vessel row: {list(v.keys())}"
 
 
 def test_indicator_json(app_client):
@@ -28,8 +62,24 @@ def test_indicator_json(app_client):
 
 
 def test_vessel_permalink(app_client):
-    """FE-5: GET /vessel/<imo> returns 200 (or 404 for unknown) with HTML."""
-    pytest.fail("stub — implement in plan 05-01")
+    """FE-5: GET /vessel/<imo> returns HTML (200 or 404), not JSON. Requires login."""
+    # Unauthenticated → redirect to login
+    resp_unauth = app_client.get("/vessel/IMO9999999", follow_redirects=False)
+    assert resp_unauth.status_code in (301, 302), (
+        f"Expected redirect for unauthenticated access, got {resp_unauth.status_code}"
+    )
+
+    # Authenticate directly via session (avoids APP_PASSWORD env mismatch
+    # when a local .env overrides the conftest setdefault value).
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    # Unknown IMO → 404 HTML (not JSON)
+    resp = app_client.get("/vessel/IMO9999999UNKNOWN")
+    assert resp.status_code == 404, f"Expected 404 for unknown IMO, got {resp.status_code}"
+    assert resp.content_type.startswith("text/html"), (
+        f"Expected HTML response, got {resp.content_type}"
+    )
 
 
 def test_csv_export(app_client):
