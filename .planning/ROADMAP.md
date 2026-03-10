@@ -190,7 +190,7 @@ Plans:
 | 3. Detection Test Coverage | v1.0 | 3/3 | Complete | 2026-03-05 |
 | 4. Security Hardening | v1.0 | 3/3 | Complete | 2026-03-09 |
 | 5. Frontend UX | v1.0 | 4/4 | Complete | 2026-03-10 |
-| 6. Score History Infrastructure | v1.1 | 0/? | Not started | - |
+| 6. Score History Infrastructure | 1/2 | In Progress|  | - |
 | 7. Alert Generation and In-App Panel | v1.1 | 0/? | Not started | - |
 | 8. Vessel Profile Enrichments | v1.1 | 0/? | Not started | - |
 | 9. Watchlist | v1.1 | 0/? | Not started | - |

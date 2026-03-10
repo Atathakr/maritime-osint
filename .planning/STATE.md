@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
-stopped_at: —
+stopped_at: "Completed 06-00-PLAN.md"
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Phase 6 plans created (06-00, 06-01); ready for /gsd:execute-phase 6
+last_activity: 2026-03-10 — Plan 6-00 complete; test stubs created; ready for Plan 6-01
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 0
-  percent: 0
+  total_phases: 10
+  completed_phases: 5
+  total_plans: 19
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 6 — Score History Infrastructure (Planned)
+Phase: 6 — Score History Infrastructure (Executing)
 Plan: 06-01 (Wave 1, not started)
-Status: Plans verified and ready; next action is `/gsd:execute-phase 6`
-Last activity: 2026-03-10 — Phase 6 plans created (06-00 Wave 0 + 06-01 Wave 1), plan checker PASS
+Status: Plan 6-00 complete — test stubs created; next action is Plan 6-01 (Wave 1)
+Last activity: 2026-03-10 — Plan 6-00 executed; tests/test_hist.py created with 4 failing stubs (HIST-01, HIST-02)
 
-Progress: ░░░░░░░░░░ 0%
+Progress: [██████████] 95%
 
 ## Accumulated Context
 
@@ -71,6 +71,12 @@ Progress: ░░░░░░░░░░ 0%
 - [Phase 06]: change-detection lives in _do_score_refresh() via _score_changed() helper, not inside append_score_history() itself — keeps append function as an unconditional write primitive
 - [Phase 06]: history endpoint column rename: DB stores computed_at, API exposes it as recorded_at for downstream consumers (alert generation, trend chart)
 - [Phase 06]: GET /api/vessels/<imo>/history must be registered BEFORE existing <path:imo> catch-all route in app.py to prevent shadowing
+
+### Decisions from Plan 6-00 (Wave 0 Test Stubs)
+
+- [Plan 06-00]: Four stubs defined covering HIST-01 (test_history_row_written, test_no_spurious_row) and HIST-02 (test_history_endpoint, test_history_endpoint_404)
+- [Plan 06-00]: IMO8000001+ range reserved for Phase 6 tests to avoid fixture collisions with Phases 2-5
+- [Plan 06-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest
 
 ### Pending Todos
 
