@@ -3,6 +3,20 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
+last_updated: "2026-03-10T15:51:38.322Z"
+last_activity: 2026-03-10 — Plan 6-01 executed; vessel_score_history migrated, change-detection added, GET /api/vessels/<imo>/history live
+progress:
+  total_phases: 10
+  completed_phases: 6
+  total_plans: 19
+  completed_plans: 19
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Analyst Workflow
+status: executing
 stopped_at: "Completed 06-01-PLAN.md"
 last_updated: "2026-03-10"
 last_activity: 2026-03-10 — Plan 6-01 complete; HIST-01 and HIST-02 implemented; 155 tests passing
