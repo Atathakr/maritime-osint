@@ -1,5 +1,7 @@
 """Flask application — Maritime OSINT Platform (Sessions 1–4: Sanctions + AIS + Reconciliation)."""
 
+import csv as _csv
+import io as _io
 import os
 import sys
 
@@ -24,7 +26,7 @@ from functools import wraps
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, make_response, redirect, render_template, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import db
@@ -47,6 +49,43 @@ from pydantic import ValidationError
 from security import limiter, csrf, init_security
 
 load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
+
+# ── Indicator metadata — all 31 Shadow Fleet Framework indicators ──────────
+# 12 implemented (have entries in indicator_json when fired).
+# 19 are placeholders — always shown as not-fired in the breakdown table.
+INDICATOR_META = [
+    {"id": "IND1",  "name": "AIS Dark Period",           "category": "Behavior",   "max_pts": 40},
+    {"id": "IND2",  "name": "Indicator 2",               "category": "—",          "max_pts": 0},
+    {"id": "IND3",  "name": "Indicator 3",               "category": "—",          "max_pts": 0},
+    {"id": "IND4",  "name": "Indicator 4",               "category": "—",          "max_pts": 0},
+    {"id": "IND5",  "name": "Indicator 5",               "category": "—",          "max_pts": 0},
+    {"id": "IND6",  "name": "Indicator 6",               "category": "—",          "max_pts": 0},
+    {"id": "IND7",  "name": "STS Transfer",              "category": "Behavior",   "max_pts": 45},
+    {"id": "IND8",  "name": "STS in Risk Zone",          "category": "Behavior",   "max_pts": 10},
+    {"id": "IND9",  "name": "Open-water Loitering",      "category": "Behavior",   "max_pts": 15},
+    {"id": "IND10", "name": "Speed Anomaly (Spoofing)",  "category": "Behavior",   "max_pts": 24},
+    {"id": "IND11", "name": "Indicator 11",              "category": "—",          "max_pts": 0},
+    {"id": "IND12", "name": "Indicator 12",              "category": "—",          "max_pts": 0},
+    {"id": "IND13", "name": "Indicator 13",              "category": "—",          "max_pts": 0},
+    {"id": "IND14", "name": "Indicator 14",              "category": "—",          "max_pts": 0},
+    {"id": "IND15", "name": "Flag Hopping",              "category": "Registry",   "max_pts": 16},
+    {"id": "IND16", "name": "Name Discrepancy",          "category": "Identity",   "max_pts": 0},
+    {"id": "IND17", "name": "Flag Risk Tier",            "category": "Registry",   "max_pts": 21},
+    {"id": "IND18", "name": "Indicator 18",              "category": "—",          "max_pts": 0},
+    {"id": "IND19", "name": "Indicator 19",              "category": "—",          "max_pts": 0},
+    {"id": "IND20", "name": "Indicator 20",              "category": "—",          "max_pts": 0},
+    {"id": "IND21", "name": "Ownership-chain Sanctions", "category": "Ownership",  "max_pts": 40},
+    {"id": "IND22", "name": "Indicator 22",              "category": "—",          "max_pts": 0},
+    {"id": "IND23", "name": "Vessel Age",                "category": "Identity",   "max_pts": 15},
+    {"id": "IND24", "name": "Indicator 24",              "category": "—",          "max_pts": 0},
+    {"id": "IND25", "name": "Indicator 25",              "category": "—",          "max_pts": 0},
+    {"id": "IND26", "name": "Indicator 26",              "category": "—",          "max_pts": 0},
+    {"id": "IND27", "name": "Indicator 27",              "category": "—",          "max_pts": 0},
+    {"id": "IND28", "name": "Indicator 28",              "category": "—",          "max_pts": 0},
+    {"id": "IND29", "name": "Sanctioned Port Call",      "category": "Behavior",   "max_pts": 40},
+    {"id": "IND30", "name": "Indicator 30",              "category": "—",          "max_pts": 0},
+    {"id": "IND31", "name": "PSC Detention Record",      "category": "Compliance", "max_pts": 20},
+]
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -355,8 +394,56 @@ def vessel_profile(imo):
     vessel = db.get_vessel(imo)
     score = db.get_vessel_score(imo)
     if not vessel and not score:
-        return render_template("vessel.html", imo=imo, vessel=None, score=None), 404
-    return render_template("vessel.html", imo=imo, vessel=vessel, score=score)
+        return render_template("vessel.html", imo=imo, vessel=None, score=None,
+                               indicator_meta=INDICATOR_META), 404
+    return render_template("vessel.html", imo=imo, vessel=vessel, score=score,
+                           indicator_meta=INDICATOR_META)
+
+
+@app.get("/export/vessels.csv")
+@login_required
+def export_vessels_csv():
+    """
+    CSV export of all scored vessels (FE-6).
+    Columns: vessel_name, imo, mmsi, flag, composite_score, risk_level,
+             evidence_count, computed_at, is_stale
+    """
+    rows = db.get_all_vessel_scores()
+    out = _io.StringIO()
+    w = _csv.writer(out)
+    w.writerow([
+        "vessel_name", "imo", "mmsi", "flag",
+        "composite_score", "risk_level", "evidence_count",
+        "computed_at", "is_stale",
+    ])
+    for r in rows:
+        score = r.get("composite_score") or 0
+        ind   = r.get("indicator_json") or {}
+        ev    = sum(1 for v in ind.values() if isinstance(v, dict) and v.get("fired"))
+        # Derive risk_level from composite_score (not stored in vessel_scores schema)
+        if score >= 100:
+            risk_level = "CRITICAL"
+        elif score >= 70:
+            risk_level = "HIGH"
+        elif score >= 40:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+        w.writerow([
+            r.get("entity_name") or "",
+            r.get("imo_number") or "",
+            r.get("mmsi") or "",
+            r.get("flag_normalized") or "",
+            score,
+            risk_level,
+            ev,
+            r.get("computed_at") or "",
+            "true" if r.get("is_stale") else "false",
+        ])
+    resp = make_response(out.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = 'attachment; filename="maritime-osint-vessels.csv"'
+    return resp
 
 
 @app.get("/api/vessels/<path:imo>")
