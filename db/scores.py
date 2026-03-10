@@ -57,6 +57,8 @@ def _init_scores_postgres() -> None:
                 imo_number      VARCHAR(20) NOT NULL,
                 composite_score INTEGER     NOT NULL,
                 is_sanctioned   SMALLINT    NOT NULL DEFAULT 0,
+                risk_level      TEXT,
+                indicator_json  JSONB       DEFAULT '{}',
                 computed_at     TIMESTAMPTZ NOT NULL
             )
         """)
@@ -66,6 +68,10 @@ def _init_scores_postgres() -> None:
         c.execute(
             "CREATE INDEX IF NOT EXISTS idx_vsh_at  ON vessel_score_history(computed_at DESC)"
         )
+        # Migration: idempotent ALTER for tables created before Phase 6
+        c.execute("ALTER TABLE vessel_score_history ADD COLUMN IF NOT EXISTS risk_level TEXT")
+        c.execute("ALTER TABLE vessel_score_history ADD COLUMN IF NOT EXISTS indicator_json JSONB DEFAULT '{}'")
+
 
 
 def _init_scores_sqlite() -> None:
@@ -87,6 +93,8 @@ def _init_scores_sqlite() -> None:
                 imo_number      TEXT    NOT NULL,
                 composite_score INTEGER NOT NULL,
                 is_sanctioned   INTEGER NOT NULL DEFAULT 0,
+                risk_level      TEXT,
+                indicator_json  TEXT    DEFAULT '{}',
                 computed_at     TEXT    NOT NULL
             )
         """)
@@ -96,6 +104,15 @@ def _init_scores_sqlite() -> None:
         c.execute(
             "CREATE INDEX IF NOT EXISTS idx_vsh_at  ON vessel_score_history(computed_at DESC)"
         )
+        # Migration: add columns for tables created before Phase 6 (SQLite has no IF NOT EXISTS for ADD COLUMN)
+        existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(vessel_score_history)")}
+        if "risk_level" not in existing_cols:
+            conn.execute("ALTER TABLE vessel_score_history ADD COLUMN risk_level TEXT")
+        if "indicator_json" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE vessel_score_history ADD COLUMN indicator_json TEXT DEFAULT '{}'"
+            )
+
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -240,27 +257,41 @@ def append_score_history(imo: str, score_data: dict) -> None:
     """
     Insert a history snapshot row into vessel_score_history.
 
-    Only stores composite_score, is_sanctioned, and computed_at — no indicator_json
-    (keeps history table small per 02-CONTEXT.md design decision).
+    Derives risk_level from composite_score / is_sanctioned internally.
+    Accepts score_data without risk_level (backward-compatible with existing callers).
     """
     composite_score = int(score_data.get("composite_score", 0))
     is_sanctioned = int(bool(score_data.get("is_sanctioned", 0)))
     computed_at = score_data.get("computed_at") or datetime.now(timezone.utc).isoformat()
+    indicator_json_raw = score_data.get("indicator_json", {})
+    indicator_json_str = _json.dumps(indicator_json_raw)
+
+    # Derive risk_level from thresholds (compute_vessel_score does not return it)
+    if is_sanctioned:
+        risk_level = "CRITICAL"
+    elif composite_score >= 70:
+        risk_level = "HIGH"
+    elif composite_score >= 40:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
 
     if _BACKEND == "postgres":
-        sql = """
-            INSERT INTO vessel_score_history (imo_number, composite_score, is_sanctioned, computed_at)
-            VALUES (%s, %s, %s, %s)
+        sql = f"""
+            INSERT INTO vessel_score_history
+                (imo_number, composite_score, is_sanctioned, risk_level, indicator_json, computed_at)
+            VALUES (%s, %s, %s, %s, {_jp()}, %s)
         """
     else:
-        sql = """
-            INSERT INTO vessel_score_history (imo_number, composite_score, is_sanctioned, computed_at)
-            VALUES (?, ?, ?, ?)
+        sql = f"""
+            INSERT INTO vessel_score_history
+                (imo_number, composite_score, is_sanctioned, risk_level, indicator_json, computed_at)
+            VALUES (?, ?, ?, ?, {_jp()}, ?)
         """
 
     with _conn() as conn:
         c = conn.cursor()
-        c.execute(sql, (imo, composite_score, is_sanctioned, computed_at))
+        c.execute(sql, (imo, composite_score, is_sanctioned, risk_level, indicator_json_str, computed_at))
 
 
 def prune_score_history(days: int = 90) -> int:
