@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
-status: roadmap_ready
+status: executing
 stopped_at: —
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Roadmap created for v1.1 (Phases 6-10); ready for /gsd:plan-phase 6
+last_activity: 2026-03-10 — Phase 6 plans created (06-00, 06-01); ready for /gsd:execute-phase 6
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 6 — Score History Infrastructure (Not started)
-Plan: —
-Status: Roadmap defined; next action is `/gsd:plan-phase 6`
-Last activity: 2026-03-10 — v1.1 roadmap created (Phases 6-10, 18 requirements mapped)
+Phase: 6 — Score History Infrastructure (Planned)
+Plan: 06-01 (Wave 1, not started)
+Status: Plans verified and ready; next action is `/gsd:execute-phase 6`
+Last activity: 2026-03-10 — Phase 6 plans created (06-00 Wave 0 + 06-01 Wave 1), plan checker PASS
 
 Progress: ░░░░░░░░░░ 0%
 
@@ -63,6 +63,14 @@ Progress: ░░░░░░░░░░ 0%
 - [Roadmap]: Phase 9 (watchlist) and Phase 10 (visual legibility) depend only on Phase 5 completion; they are independent of the history/alert chain and can run in parallel
 - [Roadmap]: Alert read/unread state stored server-side in PostgreSQL (consistent with watchlist decision — single operator, cross-session persistence preferred)
 - [Roadmap]: No new Railway services for any v1.1 feature; all tables in existing PostgreSQL DB
+
+### Decisions from Phase 6 Planning
+
+- [Phase 06]: vessel_score_history table already existed from Phase 2 but was missing risk_level and indicator_json — Phase 6 adds these via DDL migration (ALTER TABLE IF NOT EXISTS for PG, PRAGMA table_info pattern for SQLite)
+- [Phase 06]: append_score_history() derives risk_level internally (not from caller) — backward-compatible with existing test_scores.py calls
+- [Phase 06]: change-detection lives in _do_score_refresh() via _score_changed() helper, not inside append_score_history() itself — keeps append function as an unconditional write primitive
+- [Phase 06]: history endpoint column rename: DB stores computed_at, API exposes it as recorded_at for downstream consumers (alert generation, trend chart)
+- [Phase 06]: GET /api/vessels/<imo>/history must be registered BEFORE existing <path:imo> catch-all route in app.py to prevent shadowing
 
 ### Pending Todos
 

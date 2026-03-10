@@ -112,10 +112,11 @@ Plans:
   2. Vessels whose score did not change between runs produce no new history rows (no spurious snapshots).
   3. A GET request to `/api/vessels/<imo>/history` returns up to 30 snapshots in reverse chronological order as JSON; vessels with fewer than 30 changes return only what exists.
   4. The history endpoint returns a 404 for an unknown IMO and an empty list (not an error) for a valid vessel with no history yet.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-00: Wave 0 — Create tests/test_hist.py with 4 failing stubs (HIST-01, HIST-02)
+- [ ] 06-01: Wave 1 — Schema migration (add risk_level + indicator_json), update append_score_history(), add get_score_history(), change-detection in scheduler, add GET /api/vessels/<imo>/history route
 
 #### Phase 7: Alert Generation and In-App Panel
 **Goal**: Generate alerts automatically during the scheduler job when defined conditions are met, and give the analyst a visible notification badge and drill-down panel to review and dismiss alerts without leaving the dashboard.
