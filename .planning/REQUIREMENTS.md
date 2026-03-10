@@ -115,34 +115,32 @@ All shipped and verified in production. See MILESTONES.md for details.
 
 ## Traceability
 
-*Populated during roadmap creation.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HIST-01 | TBD | Pending |
-| HIST-02 | TBD | Pending |
-| ALRT-01 | TBD | Pending |
-| ALRT-02 | TBD | Pending |
-| ALRT-03 | TBD | Pending |
-| ALRT-04 | TBD | Pending |
-| ALRT-05 | TBD | Pending |
-| ALRT-06 | TBD | Pending |
-| ALRT-07 | TBD | Pending |
-| ALRT-08 | TBD | Pending |
-| PROF-01 | TBD | Pending |
-| PROF-02 | TBD | Pending |
-| WTCH-01 | TBD | Pending |
-| WTCH-02 | TBD | Pending |
-| WTCH-03 | TBD | Pending |
-| VIS-01 | TBD | Pending |
-| VIS-02 | TBD | Pending |
-| VIS-03 | TBD | Pending |
+| HIST-01 | Phase 6 | Pending |
+| HIST-02 | Phase 6 | Pending |
+| ALRT-01 | Phase 7 | Pending |
+| ALRT-02 | Phase 7 | Pending |
+| ALRT-03 | Phase 7 | Pending |
+| ALRT-04 | Phase 7 | Pending |
+| ALRT-05 | Phase 7 | Pending |
+| ALRT-06 | Phase 7 | Pending |
+| ALRT-07 | Phase 7 | Pending |
+| ALRT-08 | Phase 7 | Pending |
+| PROF-01 | Phase 8 | Pending |
+| PROF-02 | Phase 8 | Pending |
+| WTCH-01 | Phase 9 | Pending |
+| WTCH-02 | Phase 9 | Pending |
+| WTCH-03 | Phase 9 | Pending |
+| VIS-01 | Phase 10 | Pending |
+| VIS-02 | Phase 10 | Pending |
+| VIS-03 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 18 total
-- Mapped to phases: TBD
-- Unmapped: 18 ⚠️ (pending roadmap creation)
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 — v1.1 Analyst Workflow milestone started*
+*Last updated: 2026-03-10 — v1.1 roadmap created; traceability fully populated*

@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
-status: defining_requirements
+status: roadmap_ready
 stopped_at: —
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Milestone v1.1 started, requirements defined, roadmap pending
+last_activity: 2026-03-10 — Roadmap created for v1.1 (Phases 6-10); ready for /gsd:plan-phase 6
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
-**Current focus:** Milestone v1.1 — Analyst Workflow (Phase 6 onwards)
+**Current focus:** Milestone v1.1 — Analyst Workflow (Phases 6-10)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 6 — Score History Infrastructure (Not started)
 Plan: —
-Status: Roadmap pending — roadmapper running
-Last activity: 2026-03-10 — Milestone v1.1 started
+Status: Roadmap defined; next action is `/gsd:plan-phase 6`
+Last activity: 2026-03-10 — v1.1 roadmap created (Phases 6-10, 18 requirements mapped)
 
-Progress: 0%
+Progress: ░░░░░░░░░░ 0%
 
 ## Accumulated Context
 
@@ -54,6 +54,15 @@ Progress: 0%
 - Chart library: Chart.js via CDN (zero-cost); no npm build pipeline
 - Watchlist stored server-side in PostgreSQL — single operator but cross-session persistence preferred
 - Alert generation runs inside APScheduler job, after scores are updated, comparing to prior snapshots
+- History table is the prerequisite for: alert generation (ALRT-04 through ALRT-07 compare snapshots), trend chart (PROF-01), and change log (PROF-02)
+- Phases 9 and 10 are independent of history and can be planned/executed in any order relative to 7 and 8
+
+### Decisions from v1.1 Roadmap Creation
+
+- [Roadmap]: Phase 6 (history) must complete before Phase 7 (alerts) and Phase 8 (profile enrichments) can begin — both require prior snapshots to compute deltas
+- [Roadmap]: Phase 9 (watchlist) and Phase 10 (visual legibility) depend only on Phase 5 completion; they are independent of the history/alert chain and can run in parallel
+- [Roadmap]: Alert read/unread state stored server-side in PostgreSQL (consistent with watchlist decision — single operator, cross-session persistence preferred)
+- [Roadmap]: No new Railway services for any v1.1 feature; all tables in existing PostgreSQL DB
 
 ### Pending Todos
 
