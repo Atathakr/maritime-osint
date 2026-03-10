@@ -75,5 +75,6 @@ from .scores import (  # noqa: F401
     init_scores_tables, upsert_vessel_score, get_vessel_score,
     get_all_vessel_scores, mark_risk_scores_stale,
     append_score_history, prune_score_history,
+    get_score_history,
     archive_old_ais_positions,
 )

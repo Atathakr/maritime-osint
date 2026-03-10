@@ -133,6 +133,34 @@ def _refresh_all_scores_job() -> None:
         log.exception("[scheduler] score refresh failed")
 
 
+def _score_changed(prior: dict, fresh: dict) -> bool:
+    """
+    Return True if the fresh score differs from the most recent history snapshot.
+
+    Compares composite_score, is_sanctioned, and indicator_json.
+    Used to suppress spurious history rows when nothing has changed.
+    """
+    import json as _json
+    if int(prior.get("composite_score", -1)) != int(fresh.get("composite_score", -1)):
+        return True
+    if int(bool(prior.get("is_sanctioned"))) != int(bool(fresh.get("is_sanctioned"))):
+        return True
+    # Normalise both sides to dict before comparing
+    prior_ind = prior.get("indicator_json") or {}
+    fresh_ind = fresh.get("indicator_json") or {}
+    if isinstance(prior_ind, str):
+        try:
+            prior_ind = _json.loads(prior_ind)
+        except Exception:
+            prior_ind = {}
+    if isinstance(fresh_ind, str):
+        try:
+            fresh_ind = _json.loads(fresh_ind)
+        except Exception:
+            fresh_ind = {}
+    return prior_ind != fresh_ind
+
+
 def _do_score_refresh() -> None:
     """Iterate over all known vessel_scores rows and recompute each score."""
     import logging
@@ -146,7 +174,12 @@ def _do_score_refresh() -> None:
         try:
             fresh = screening.compute_vessel_score(imo)
             db.upsert_vessel_score(imo, fresh)
-            db.append_score_history(imo, fresh)
+
+            # HIST-01: only append history when the score has changed
+            prior = db.get_score_history(imo, limit=1)
+            if not prior or _score_changed(prior[0], fresh):
+                db.append_score_history(imo, fresh)
+
             refreshed += 1
         except Exception:
             log.exception("[scheduler] failed to refresh score for IMO %s", imo)

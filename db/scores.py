@@ -294,6 +294,47 @@ def append_score_history(imo: str, score_data: dict) -> None:
         c.execute(sql, (imo, composite_score, is_sanctioned, risk_level, indicator_json_str, computed_at))
 
 
+def get_score_history(imo: str, limit: int = 30) -> list[dict]:
+    """
+    Return the most recent `limit` history snapshots for a vessel, newest first.
+
+    Returns an empty list if the vessel has no history rows.
+    indicator_json is normalised to dict for every row.
+    """
+    if _BACKEND == "postgres":
+        sql = """
+            SELECT id, imo_number, composite_score, is_sanctioned, risk_level,
+                   indicator_json, computed_at
+            FROM vessel_score_history
+            WHERE imo_number = %s
+            ORDER BY computed_at DESC
+            LIMIT %s
+        """
+    else:
+        sql = """
+            SELECT id, imo_number, composite_score, is_sanctioned, risk_level,
+                   indicator_json, computed_at
+            FROM vessel_score_history
+            WHERE imo_number = ?
+            ORDER BY computed_at DESC
+            LIMIT ?
+        """
+
+    with _conn() as conn:
+        c = _cursor(conn)
+        c.execute(sql, (imo, limit))
+        rows = _rows(c)
+
+    for row in rows:
+        if isinstance(row.get("indicator_json"), str):
+            try:
+                row["indicator_json"] = _json.loads(row["indicator_json"])
+            except (_json.JSONDecodeError, TypeError):
+                row["indicator_json"] = {}
+
+    return rows
+
+
 def prune_score_history(days: int = 90) -> int:
     """
     Delete vessel_score_history rows older than `days` days.
