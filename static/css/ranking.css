@@ -1,0 +1,26 @@
+/* ranking.css — Vessel risk ranking table styles (Phase 5 FE-1) */
+
+.ranking-th {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.ranking-th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.ranking-th.sortable:hover { color: var(--text); }
+.ranking-th.sort-asc::after  { content: ' \25b2'; font-size: 0.7em; }
+.ranking-th.sort-desc::after { content: ' \25bc'; font-size: 0.7em; }
+
+.ranking-row:hover {
+  background: var(--surface-alt, rgba(255,255,255,0.04));
+}
+.ranking-row-critical { border-left: 3px solid var(--danger, #ef4444); }
+.ranking-row-high     { border-left: 3px solid var(--accent, #f97316); }
+.ranking-row-medium   { border-left: 3px solid var(--warn,   #eab308); }
+.ranking-row-low      { border-left: 3px solid var(--success, #22c55e); }
+.ranking-row-unknown  { border-left: 3px solid transparent; }
