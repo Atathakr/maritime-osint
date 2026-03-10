@@ -1,158 +1,148 @@
-# Requirements
+# Requirements: maritime-osint
 
-**Milestone:** Production Maturity Pass v1
-**Date:** 2026-03-03
-**Status:** Active
-
----
-
-## Milestone Goal
-
-Bring the maritime-osint platform to a level where it can be used confidently by maritime analysts, compliance researchers, and sanctions screeners — without hitting performance walls, security gaps, or maintainability landmines.
+**Defined:** 2026-03-10 (v1.1 — Analyst Workflow)
+**Core Value:** Any analyst can load the dashboard and immediately see which vessels are highest risk — with enough context to understand why and act on it.
 
 ---
 
-## Validated Requirements (Existing Capabilities)
+## v1.0 Requirements (Complete)
 
-These are confirmed working and out of scope for this milestone:
+All shipped and verified in production. See MILESTONES.md for details.
 
-- ✓ Canonical vessel registry with IMO-based deduplication
-- ✓ OFAC SDN and OpenSanctions sanctions screening
-- ✓ Live AIS stream ingestion via aisstream.io WebSocket
-- ✓ NOAA historical AIS baseline ingestion
-- ✓ Dark period detection (Indicator 1)
-- ✓ AIS spoofing detection
-- ✓ Ship-to-ship transfer detection (Indicator 7)
-- ✓ Loitering detection
-- ✓ Flask web dashboard with password auth
-- ✓ Railway deployment (PostgreSQL + Gunicorn)
+### Database
+- ✅ **DB-01**: db/ package decomposition — schema, ingestion, detection, screening modules
+- ✅ **DB-02**: Pre-computed risk scores stored in vessel_scores table
+- ✅ **DB-03**: N+1 query patterns eliminated in dashboard data loading
+- ✅ **DB-04**: AIS position table archival strategy implemented
+- ✅ **DB-05**: Unused Anthropic SDK dependency removed
 
----
+### Infrastructure & Testing
+- ✅ **INF-01**: APScheduler refreshes all vessel scores on 15-minute cycle
+- ✅ **INF-02**: Detection logic has automated test coverage (pytest, 151 tests green)
+- ✅ **INF-03**: SECRET_KEY enforced via environment variable
 
-## Active Requirements
+### Security
+- ✅ **SEC-01**: Rate limiting on login endpoint (Redis-backed, multi-worker safe)
+- ✅ **SEC-02**: CSRF protection on state-changing endpoints (flask-wtf)
+- ✅ **SEC-03**: Security headers: CSP (enforcement), HSTS, X-Frame-Options, X-Content-Type-Options
+- ✅ **SEC-04**: CodeQL false positive alerts addressed
+- ✅ **SEC-05**: Session secret enforced via environment variable
 
-### Area 1: Database
-
-**Goal:** Pre-compute risk scores so the dashboard is fast, and decompose db.py so the codebase is maintainable.
-
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| DB-1 | Pre-computed composite risk scores | `vessel_scores` table with `composite_score`, `indicator_json` (JSONB), `computed_at`; APScheduler refreshes every 15 min |
-| DB-2 | Risk score history | `vessel_score_history` table; one row appended per vessel per refresh; 90-day retention policy in place |
-| DB-3 | db.py decomposed into db/ package | `db/` package with `connection.py`, `schema.py`, and domain sub-modules; `__init__.py` re-exports all public functions; all existing callers (`import db; db.fn()`) unchanged |
-| DB-4 | Score freshness metadata | `computed_at` timestamp stored on every score row; staleness fallback in `screening.py` re-computes on-demand if score is >30 min old |
-| DB-5 | Score invalidation after ingest | Ingest functions (`upsert_sanctions`, OFAC ingest) mark affected vessel scores stale; next refresh re-scores them |
-
----
-
-### Area 2: Infrastructure
-
-**Goal:** Eliminate known reliability and maintainability landmines before they compound.
-
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| INF-1 | N+1 query elimination | No per-vessel SELECT loops in dashboard or vessel ranking endpoints; batch queries used for all multi-vessel data fetches |
-| INF-2 | AIS position archival strategy | APScheduler job deletes `ais_positions` rows older than 90 days; job runs daily; Railway storage growth bounded |
-| INF-3 | Unused Anthropic SDK removed | `anthropic` package removed from `requirements.txt` if confirmed unused; no import errors |
-| INF-4 | Session secret enforcement | `SECRET_KEY` loaded from environment variable; app fails with clear error at startup if not set; no hardcoded or generated-at-runtime secret |
+### Frontend
+- ✅ **FE-01**: Vessel ranking table — sortable columns, paginated 50/100/250, loads <500ms
+- ✅ **FE-02**: Numeric risk scores visible everywhere (table, vessel profile, map popup)
+- ✅ **FE-03**: Freshness stamps on vessel profile; stale scores visually flagged
+- ✅ **FE-04**: Indicator breakdown table — all 31 indicators, fired ones highlighted
+- ✅ **FE-05**: Vessel permalink at /vessel/<imo> — stable, bookmarkable
+- ✅ **FE-06**: CSV export from ranking table (full fleet, 9 columns)
 
 ---
 
-### Area 3: Security
+## v1.1 Requirements
 
-**Goal:** Harden the live application against common web attacks and raise code-level security posture.
+### Score History
 
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| SEC-1 | Login rate limiting | `/login` POST limited to 10 attempts/minute per IP; Flask-Limiter with PostgreSQL storage backend (not in-memory); ProxyFix applied for Railway proxy headers |
-| SEC-2 | CSRF protection on login form | Flask-WTF CSRFProtect on `/login` and `/logout`; all `/api/*` routes explicitly exempted; no impact on ingest endpoints |
-| SEC-3 | Security headers | flask-talisman applied with: HSTS, CSP whitelist (self + unpkg.com + OSM tiles), X-Frame-Options DENY, X-Content-Type-Options; `force_https=False` for Railway |
-| SEC-4 | CSP template audit | All inline `<script>` tags in dashboard templates moved to `static/` JS files before CSP enforcement enabled; CSP deployed in report-only mode first |
-| SEC-5 | CodeQL false positives dismissed | 7 open `py/sql-injection` medium alerts in GitHub Security tab dismissed as false positives; reason documented: "Backend-agnostic placeholder variable, not user data" |
+- [ ] **HIST-01**: System stores a snapshot of each vessel's composite score, risk level, is_sanctioned, and indicator_json each time the scheduler runs and the score has changed from the previous snapshot
+- [ ] **HIST-02**: Analyst can retrieve the last 30 score snapshots for any vessel via `/api/vessels/<imo>/history` (used by trend chart and change log)
 
----
+### Alerting
 
-### Area 4: Frontend
+- [ ] **ALRT-01**: Dashboard header shows a notification badge with unread alert count; badge is hidden when count is zero
+- [ ] **ALRT-02**: Analyst can open an alert panel listing all unread alerts: vessel name, alert type, score at trigger, time since triggered
+- [ ] **ALRT-03**: Analyst can click any alert to open a detail view showing: before/after composite score, before/after risk level, list of indicators that newly fired, and a "View Vessel →" link to the vessel profile
+- [ ] **ALRT-04**: Alert is generated when a vessel's risk level crosses a threshold in either direction (LOW↔MEDIUM↔HIGH↔CRITICAL); one alert per crossing event per scheduler run
+- [ ] **ALRT-05**: Alert is generated when a vessel enters the top 50 highest-scoring vessels list (was not in top 50 in the prior scheduler run)
+- [ ] **ALRT-06**: Alert is generated when a vessel's `is_sanctioned` field flips from false to true (newly matched against a sanctions list)
+- [ ] **ALRT-07**: Alert is generated when a vessel's composite score changes by 15 or more points in a single scheduler run
+- [ ] **ALRT-08**: Analyst can mark individual alerts as read (dismissed); unread badge count decrements accordingly; read alerts remain visible in a "read" section
 
-**Goal:** Make the dashboard credible to maritime professionals by surfacing risk data clearly and completely.
+### Vessel Profile Enrichments
 
-| ID | Requirement | Acceptance Criteria |
-|----|-------------|---------------------|
-| FE-1 | Vessel ranking table | Sortable table of all vessels ranked by composite score (desc default); columns: Name, IMO, Flag, Score (number), Level (label), Last AIS, Sanctions; paginated 50/100/250; loads in <500ms |
-| FE-2 | Risk score as number everywhere | Numeric score (0-99) displayed alongside risk label on: ranking table, vessel profile header, map popup on click, search results |
-| FE-3 | Data freshness stamps | Vessel profile shows: "AIS last seen: Xh ago", "Sanctions screened: X days ago", "Risk score: computed X min ago"; stale scores (>2h) flagged visually |
-| FE-4 | Indicator point-contribution breakdown | Vessel profile shows per-indicator table: indicator name, description, points awarded, detection timestamp; indicators that did NOT fire shown greyed out; total shown |
-| FE-5 | Vessel profile permalink | Stable route `GET /vessel/<imo>` returns full profile; URL copyable and bookmarkable |
-| FE-6 | CSV export | From vessel ranking table, export current filtered view as CSV (IMO, Name, Flag, Score, Level, Sanctions, Last AIS, Score Computed At) |
+- [ ] **PROF-01**: Vessel profile shows a score trend chart displaying the vessel's composite score over the last 30 snapshots, with timestamps on the x-axis
+- [ ] **PROF-02**: Vessel profile shows a change log summarizing what changed in the most recent scheduler run: score delta (e.g. "▲ +12 pts"), risk level change if any, and names of indicators that newly fired or newly cleared since the prior snapshot
 
----
+### Watchlist
 
-## Out of Scope (This Milestone)
+- [ ] **WTCH-01**: Analyst can pin a vessel to their watchlist via a button on the ranking table row or the vessel profile page
+- [ ] **WTCH-02**: Analyst can remove a vessel from their watchlist using the same button (toggles)
+- [ ] **WTCH-03**: Watchlisted vessels appear pinned to the top of the ranking table with a distinct visual indicator (e.g. pin icon); they appear above all non-pinned vessels regardless of score
 
-- Real-time WebSocket push to browser
-- Multi-user RBAC / user management
-- Mobile app or responsive redesign
-- ML-based anomaly detection
-- Paid data source integrations (MarineTraffic, Windward API)
-- AIS track replay timeline slider
-- Score trend visualization charts
-- Automated CodeQL remediation agent (Gasparilla — deferred)
+### Visual Legibility
+
+- [ ] **VIS-01**: Base body font size increased to at least 15px across dashboard and vessel profile; table row height adjusted to match
+- [ ] **VIS-02**: Vertical spacing between dashboard panels and sections increased; table rows have additional padding for breathing room
+- [ ] **VIS-03**: Composite score number, risk badge, and section headings are visually dominant relative to supporting data; font weight and size hierarchy established
 
 ---
 
-## Dependencies Between Areas
+## Future Requirements (v1.2+)
 
-```
-DB-1 (vessel_scores table)
-  → FE-1 (ranking table — needs pre-computed scores for <500ms)
-  → FE-2 (score number — needs score to be stored)
-  → FE-3 (freshness stamps — needs computed_at)
-  → FE-4 (indicator breakdown — needs indicator_json JSONB)
+### Alerting Extensions
+- Email / webhook alert delivery (SMTP or configurable webhook URL)
+- Alert frequency controls (suppress repeated alerts for same vessel within N hours)
+- Analyst-configurable threshold values for alerts
 
-DB-3 (db/ package)
-  → SEC-1, SEC-2, SEC-3 (stable public API before security layer wraps it)
-  → INF-1 (batch queries easier to write against clean db modules)
+### Data Sources
+- Equasis ownership/management data integration (beneficial owner opacity indicators)
+- EU consolidated + UN Security Council + UK HM Treasury sanctions lists
+- Paris MOU / Tokyo MOU PSC inspection and detention records (active ingestion)
+- Global Fishing Watch API (AIS manipulation and loitering patterns)
 
-INF-4 (SECRET_KEY enforcement)
-  → SEC-1, SEC-2 (Flask-Limiter and Flask-WTF both need app.secret_key)
-```
+### Indicator Coverage
+- Implement remaining 19 unimplemented indicators (currently 12/31 active)
+- Beneficial ownership opacity indicators (requires Equasis)
+
+### Analyst Tools
+- Saved/named search filters (persist filter state by name)
+- Analyst annotations on vessel profiles (freeform notes)
+- Vessel comparison view (side-by-side two vessels)
 
 ---
 
-## Build Order Recommendation
+## Out of Scope
 
-Based on dependencies and risk:
-
-1. **Phase 1 — Database Decomposition** (DB-3, INF-3, INF-4): Foundation; zero behavior change; creates `db/` package that all subsequent phases depend on
-2. **Phase 2 — Pre-Computed Scores** (DB-1, DB-2, DB-4, DB-5, INF-1, INF-2): Highest value; unblocks all frontend features; do after Phase 1
-3. **Phase 3 — Test Coverage** (parallel with Phase 2): Write detection module tests; provides regression safety net for Phase 4
-4. **Phase 4 — Security Hardening** (SEC-1 through SEC-5): After stable db surface and test safety net
-5. **Phase 5 — Frontend UX** (FE-1 through FE-6): After pre-computed scores exist; FE-1 through FE-4 are all blocked on DB-1
+| Feature | Reason |
+|---------|--------|
+| Real-time WebSocket push updates | Polling sufficient; adds complexity |
+| Multi-user auth / RBAC | Single-operator tool |
+| Mobile application | Web-first |
+| ML-based anomaly detection | Rule-based indicators only |
+| Paid data sources (Lloyd's, Refinitiv) | Open data only |
+| Email/webhook alerts | Deferred to v1.2+ |
+| Cross-device watchlist sync | localStorage acceptable for single operator |
 
 ---
 
 ## Traceability
 
+*Populated during roadmap creation.*
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DB-3 | Phase 1 — Database Decomposition | Complete |
-| INF-3 | Phase 1 — Database Decomposition | Complete |
-| INF-4 | Phase 1 — Database Decomposition | Complete |
-| DB-1 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| DB-2 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| DB-4 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| DB-5 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| INF-1 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| INF-2 | Phase 2 — Pre-Computed Risk Scores | Complete |
-| INF (detection test coverage) | Phase 3 — Detection Test Coverage | Pending |
-| SEC-1 | Phase 4 — Security Hardening | Complete |
-| SEC-2 | Phase 4 — Security Hardening | Complete |
-| SEC-3 | Phase 4 — Security Hardening | Complete |
-| SEC-4 | Phase 4 — Security Hardening | Complete |
-| SEC-5 | Phase 4 — Security Hardening | Complete |
-| FE-1 | Phase 5 — Frontend UX | Complete |
-| FE-2 | Phase 5 — Frontend UX | Complete |
-| FE-3 | Phase 5 — Frontend UX | Complete |
-| FE-4 | Phase 5 — Frontend UX | Complete |
-| FE-5 | Phase 5 — Frontend UX | Complete |
-| FE-6 | Phase 5 — Frontend UX | Complete |
+| HIST-01 | TBD | Pending |
+| HIST-02 | TBD | Pending |
+| ALRT-01 | TBD | Pending |
+| ALRT-02 | TBD | Pending |
+| ALRT-03 | TBD | Pending |
+| ALRT-04 | TBD | Pending |
+| ALRT-05 | TBD | Pending |
+| ALRT-06 | TBD | Pending |
+| ALRT-07 | TBD | Pending |
+| ALRT-08 | TBD | Pending |
+| PROF-01 | TBD | Pending |
+| PROF-02 | TBD | Pending |
+| WTCH-01 | TBD | Pending |
+| WTCH-02 | TBD | Pending |
+| WTCH-03 | TBD | Pending |
+| VIS-01 | TBD | Pending |
+| VIS-02 | TBD | Pending |
+| VIS-03 | TBD | Pending |
+
+**Coverage:**
+- v1.1 requirements: 18 total
+- Mapped to phases: TBD
+- Unmapped: 18 ⚠️ (pending roadmap creation)
+
+---
+*Requirements defined: 2026-03-10*
+*Last updated: 2026-03-10 — v1.1 Analyst Workflow milestone started*
