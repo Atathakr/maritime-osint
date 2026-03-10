@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 05-frontend-ux/05-02-PLAN.md
-last_updated: "2026-03-10T00:26:13.851Z"
+stopped_at: Completed 05-frontend-ux/05-01-PLAN.md
+last_updated: "2026-03-10T00:26:30.499Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
@@ -110,6 +110,7 @@ Progress: [████████░░] 80%
 | Phase 04-security-hardening P03 | 2 | 2 tasks | 1 files |
 | Phase 05-frontend-ux P00 | 1 | 1 tasks | 1 files |
 | Phase 05-frontend-ux P02 | 5 | 3 tasks | 8 files |
+| Phase 05-frontend-ux P05-01 | 6 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,8 @@ Recent decisions affecting current work:
 - [Phase 05-frontend-ux]: Phase 5 follows same Wave 0 stub pattern as Phase 4: pytest.fail() stubs for Nyquist compliance before implementation begins
 - [Phase 05-frontend-ux]: app_client fixture (function scope) used for all 6 FE stubs — avoids sqlite_db dependency, function scope resets Flask-Limiter counters
 - [Phase 05-frontend-ux]: Used session_transaction() for test auth instead of POST /login — POST login returned 302 even after successful form submit; session_transaction() directly sets session[authenticated]=True, consistent with test_vessel_permalink pattern
+- [Phase 05-frontend-ux]: Score data embedded server-side via <script type='application/json'> — avoids second API round-trip, CSP safe
+- [Phase 05-frontend-ux]: test_vessel_permalink uses session_transaction() not form POST — APP_PASSWORD in .env overrides conftest setdefault
 
 ### Pending Todos
 
@@ -167,6 +170,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-10T00:25:58.274Z
-Stopped at: Completed 05-frontend-ux/05-02-PLAN.md
+Last session: 2026-03-10T00:26:30.491Z
+Stopped at: Completed 05-frontend-ux/05-01-PLAN.md
 Resume file: None
