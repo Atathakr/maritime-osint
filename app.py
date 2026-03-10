@@ -479,6 +479,40 @@ def export_vessels_csv():
     return resp
 
 
+@app.get("/api/vessels/<imo>/history")
+@login_required
+def api_vessel_history(imo):
+    """
+    Return the last 30 score snapshots for a vessel (HIST-02).
+
+    Response shape:
+        200 {"history": [...]}   — vessel known, 0 or more rows
+        404 {"error": "..."}     — IMO not in vessels_canonical or vessel_scores
+    """
+    # IMO existence check: vessel must be in vessels_canonical OR vessel_scores
+    vessel = db.get_vessel(imo)
+    score = db.get_vessel_score(imo)
+    if not vessel and not score:
+        return jsonify({"error": "Vessel not found"}), 404
+
+    rows = db.get_score_history(imo, limit=30)
+
+    # Serialise each row; rename computed_at → recorded_at for clarity
+    history = []
+    for row in rows:
+        history.append({
+            "id": row.get("id"),
+            "imo_number": row.get("imo_number"),
+            "composite_score": row.get("composite_score"),
+            "risk_level": row.get("risk_level"),
+            "is_sanctioned": bool(row.get("is_sanctioned")),
+            "indicator_json": row.get("indicator_json") or {},
+            "recorded_at": row.get("computed_at"),
+        })
+
+    return jsonify({"history": history})
+
+
 @app.get("/api/vessels/<path:imo>")
 @login_required
 def api_vessel_detail(imo):
