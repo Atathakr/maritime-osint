@@ -69,6 +69,10 @@
 
 </main>
 
+<!-- INDICATOR_META passed server-side as JSON — CSP safe (type=application/json) -->
+<script id="indicator-meta" type="application/json">
+  {{ indicator_meta | tojson }}
+</script>
 <!-- Score data injected server-side for vessel.js — no inline script (CSP safe) -->
 <script id="vessel-score-data" type="application/json">
   {{ score | tojson if score else 'null' }}

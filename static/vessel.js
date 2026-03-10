@@ -79,6 +79,71 @@
     window._vesselScore = score;
   }
 
+  // ── Indicator breakdown table ─────────────────────────────────────────────
+
+  function renderIndicatorTable(score) {
+    var section = document.getElementById('indicator-section');
+    var container = document.getElementById('indicator-table-container');
+    if (!section || !container) return;
+
+    var metaEl = document.getElementById('indicator-meta');
+    var indicators = [];
+    if (metaEl) {
+      try { indicators = JSON.parse(metaEl.textContent); } catch (e) {}
+    }
+    if (!indicators || indicators.length === 0) return;
+
+    var indJson = (score && score.indicator_json) ? score.indicator_json : {};
+
+    // Sort: fired indicators float to top (globally, not per-category)
+    var sorted = indicators.slice().sort(function (a, b) {
+      var af = indJson.hasOwnProperty(a.id) ? 1 : 0;
+      var bf = indJson.hasOwnProperty(b.id) ? 1 : 0;
+      return bf - af;  // fired (1) before not-fired (0)
+    });
+
+    var totalPts = 0;
+    var rows = sorted.map(function (meta) {
+      var indData = indJson[meta.id];
+      var fired   = indData !== undefined;
+      var pts     = fired ? (indData.pts || 0) : 0;
+      totalPts   += pts;
+      var firedAt = fired && indData.fired_at ? relativeTime(indData.fired_at) : '—';
+      var rowStyle = fired ? 'background:#fef2f2;' : '';
+      var catStyle = fired ? '' : 'color:var(--muted);';
+      var nameStyle = fired ? '' : 'color:var(--muted);';
+      var statusHtml = fired
+        ? '<span class="badge badge-red" style="font-size:0.75em;">Fired</span>'
+        : '<span style="color:var(--muted);">—</span>';
+      return '<tr style="' + rowStyle + '">'
+        + '<td style="font-size:0.8em;' + catStyle + '">' + escHtml(meta.category) + '</td>'
+        + '<td style="' + nameStyle + '">' + escHtml(meta.name) + '</td>'
+        + '<td style="text-align:right;">' + (pts > 0 ? pts : '—') + '</td>'
+        + '<td>' + statusHtml + '</td>'
+        + '<td style="font-size:0.85em;color:var(--muted);">' + escHtml(firedAt) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    var tableHtml = '<table class="data-table" style="width:100%;">'
+      + '<thead><tr>'
+      + '<th style="font-size:0.8em;color:var(--muted);">Category</th>'
+      + '<th style="font-size:0.8em;color:var(--muted);">Indicator</th>'
+      + '<th style="font-size:0.8em;color:var(--muted);text-align:right;">Points</th>'
+      + '<th style="font-size:0.8em;color:var(--muted);">Status</th>'
+      + '<th style="font-size:0.8em;color:var(--muted);">Last Fired</th>'
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '<tfoot><tr>'
+      + '<td colspan="2" style="font-weight:600;padding-top:0.5rem;">Total Score</td>'
+      + '<td style="font-weight:700;text-align:right;padding-top:0.5rem;">' + totalPts + '</td>'
+      + '<td colspan="2"></td>'
+      + '</tr></tfoot>'
+      + '</table>';
+
+    container.innerHTML = tableHtml;
+    section.style.display = 'block';
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -88,6 +153,7 @@
       try { score = JSON.parse(scoreEl.textContent); } catch (e) {}
     }
     renderScoreHero(score);
+    renderIndicatorTable(score);
   });
 
 }());
