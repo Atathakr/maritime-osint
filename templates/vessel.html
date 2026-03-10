@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ vessel.entity_name if vessel else imo }} — Maritime OSINT</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="header">
+  <div class="flex-center">
+    <span class="header-brand">MARITIME OSINT</span>
+    <span class="header-sub">Vessel Profile</span>
+  </div>
+  <div class="header-right">
+    <a href="/">Back to dashboard</a>
+    <a href="/logout">Logout</a>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Back link -->
+  <a href="/" class="text-muted" style="display:inline-block;margin-bottom:1rem;">
+    &larr; Back to dashboard
+  </a>
+
+  {% if not vessel and not score %}
+    <div class="card">
+      <p class="text-muted">Vessel <strong>{{ imo }}</strong> not found.</p>
+    </div>
+  {% else %}
+
+  <!-- Header row -->
+  <div class="card" style="margin-bottom:1rem;">
+    <h1 style="margin:0 0 0.25rem;">
+      {{ vessel.entity_name if vessel else imo }}
+    </h1>
+    <div class="text-muted" style="font-size:0.9rem;">
+      IMO: {{ vessel.imo_number if vessel else imo }}
+      {% if vessel and vessel.mmsi %} &nbsp;&middot;&nbsp; MMSI: {{ vessel.mmsi }}{% endif %}
+      {% if vessel and vessel.flag_normalized %} &nbsp;&middot;&nbsp; Flag: {{ vessel.flag_normalized }}{% endif %}
+    </div>
+  </div>
+
+  <!-- Score hero (populated by vessel.js reading server-injected JSON data) -->
+  <div class="card" id="score-hero" style="margin-bottom:1rem;">
+    <div id="score-loading" class="text-muted">Loading score&hellip;</div>
+    <div id="score-content" style="display:none;">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.5rem;">
+        <span id="score-value" style="font-size:3rem;font-weight:700;line-height:1;"></span>
+        <span id="score-badge"></span>
+      </div>
+      <div id="score-freshness" class="text-muted" style="font-size:0.85rem;"></div>
+    </div>
+    <div id="score-none" style="display:none;" class="text-muted">
+      Score not computed
+    </div>
+  </div>
+
+  <!-- Indicator breakdown placeholder — populated in plan 05-03 -->
+  <div class="card" id="indicator-section" style="display:none;">
+    <h3 style="margin-top:0;">Indicator Breakdown</h3>
+    <div id="indicator-table-container"></div>
+  </div>
+
+  {% endif %}
+
+</main>
+
+<!-- Score data injected server-side for vessel.js — no inline script (CSP safe) -->
+<script id="vessel-score-data" type="application/json">
+  {{ score | tojson if score else 'null' }}
+</script>
+<!-- Pass IMO to vessel.js as a data attribute — no inline script needed (CSP compliance) -->
+<div id="vessel-data" data-imo="{{ imo }}" style="display:none;"></div>
+<script src="{{ url_for('static', filename='vessel.js') }}"></script>
+</body>
+</html>
