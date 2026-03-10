@@ -701,10 +701,12 @@ def get_map_vessels_raw(
                      AND vc2.imo_number = av.imo_number)
              LIMIT 1) AS source_tags,
             COALESCE(dp.risk_num,  0) AS dp_risk_num,
-            COALESCE(sts.risk_num, 0) AS sts_risk_num
+            COALESCE(sts.risk_num, 0) AS sts_risk_num,
+            vs.composite_score AS composite_score
         FROM  ais_vessels av
         LEFT  JOIN dp_agg  dp  ON dp.mmsi  = av.mmsi
         LEFT  JOIN sts_agg sts ON sts.mmsi = av.mmsi
+        LEFT  JOIN vessel_scores vs ON vs.imo_number = av.imo_number
         WHERE av.last_lat  IS NOT NULL
           AND av.last_lon  IS NOT NULL
           AND av.last_seen >= {av_cutoff}

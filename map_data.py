@@ -138,6 +138,7 @@ def get_map_vessels(
             "length":       r.get("length"),
             "draft":        r.get("draft"),
             "sanctioned":   sanctioned,
+            "composite_score": r.get("composite_score"),   # int or None
             "source_tags":  source_tags,
             "dp_risk":      _NUM_TO_LABEL[dp_risk_num],
             "sts_risk":     _NUM_TO_LABEL[sts_risk_num],

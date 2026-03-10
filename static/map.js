@@ -110,22 +110,20 @@
       .map(t => `<span class="badge badge-${tagBadgeClass(t)}" style="font-size:.65rem;">${escHtml(t)}</span>`)
       .join(" ") || "";
     
-    const trackBtn = v.mmsi 
+    const scoreLine = (v.composite_score != null)
+      ? `<tr><td style="color:var(--muted);font-size:0.85em;">Score</td><td><strong>${v.composite_score}</strong></td></tr>`
+      : "";
+
+    const trackBtn = v.mmsi
       ? `<button class="btn btn-secondary btn-sm" style="margin-top:.5rem;width:100%;"
            onclick="toggleVesselTrack('${escAttr(v.mmsi)}', '${escAttr(v.vessel_name||"Unknown")}');">
            ${v.mmsi === _trackMmsi ? "Hide Track" : "72h history"}
          </button>`
       : "";
 
-    const screenBtn = v.imo_number
-      ? `<button class="btn btn-primary btn-sm" style="margin-top:.25rem;width:100%;"
-           onclick="document.getElementById('screen-query').value='${escAttr(v.imo_number)}';runScreening();">
-           Screen this vessel
-         </button>`
-      : `<button class="btn btn-secondary btn-sm" style="margin-top:.25rem;width:100%;"
-           onclick="document.getElementById('screen-query').value='${escAttr(v.mmsi||"")}';runScreening();">
-           Screen this vessel (MMSI)
-         </button>`;
+    const profileLink = v.imo_number
+      ? `<a href="/vessel/${escAttr(v.imo_number)}" style="display:inline-block;margin-top:0.5rem;font-size:0.85em;">View Profile &rarr;</a>`
+      : "";
 
     return `<div class="map-popup">
       <div class="map-popup-title">${name}</div>
@@ -137,12 +135,13 @@
         <tr><td>SOG / COG</td><td>${sog} / ${cog}</td></tr>
         <tr><td>Destination</td><td>${dest}</td></tr>
         <tr><td>Last seen</td><td>${seen}</td></tr>
+        ${scoreLine}
       </table>
       <div style="margin:.4rem 0 .2rem;font-size:.72rem;color:var(--muted);">Risk factors</div>
       <ul class="map-popup-risks">${reasons}</ul>
       ${tags ? `<div style="margin-top:.35rem;">${tags}</div>` : ""}
       ${trackBtn}
-      ${screenBtn}
+      ${profileLink}
     </div>`;
   }
 
