@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Completed 05-frontend-ux/05-00-PLAN.md
-last_updated: "2026-03-10T00:18:19.821Z"
+stopped_at: Completed 05-frontend-ux/05-02-PLAN.md
+last_updated: "2026-03-10T00:26:13.851Z"
 last_activity: 2026-03-05 — Phase 3 plan 03-02 (dark_periods + STS detect() extraction) complete
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 16
   percent: 100
 ---
 
@@ -109,6 +109,7 @@ Progress: [████████░░] 80%
 | Phase 04-security-hardening P02 | 7 | 1 tasks | 5 files |
 | Phase 04-security-hardening P03 | 2 | 2 tasks | 1 files |
 | Phase 05-frontend-ux P00 | 1 | 1 tasks | 1 files |
+| Phase 05-frontend-ux P02 | 5 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,7 @@ Recent decisions affecting current work:
 - [Phase 04-security-hardening]: content_security_policy_report_uri removed from Talisman init — only required in report-only mode; enforcement mode does not send violation reports
 - [Phase 05-frontend-ux]: Phase 5 follows same Wave 0 stub pattern as Phase 4: pytest.fail() stubs for Nyquist compliance before implementation begins
 - [Phase 05-frontend-ux]: app_client fixture (function scope) used for all 6 FE stubs — avoids sqlite_db dependency, function scope resets Flask-Limiter counters
+- [Phase 05-frontend-ux]: Used session_transaction() for test auth instead of POST /login — POST login returned 302 even after successful form submit; session_transaction() directly sets session[authenticated]=True, consistent with test_vessel_permalink pattern
 
 ### Pending Todos
 
@@ -165,6 +167,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-10T00:18:19.814Z
-Stopped at: Completed 05-frontend-ux/05-00-PLAN.md
+Last session: 2026-03-10T00:25:58.274Z
+Stopped at: Completed 05-frontend-ux/05-02-PLAN.md
 Resume file: None
