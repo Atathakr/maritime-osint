@@ -15,8 +15,9 @@ def test_ranking_sort(app_client):
         f"Expected redirect for unauthenticated access, got {resp_unauth.status_code}"
     )
 
-    # Log in
-    app_client.post("/login", data={"password": "testpass"}, follow_redirects=True)
+    # Authenticate directly via session (avoids APP_PASSWORD env mismatch)
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
 
     resp = app_client.get("/api/vessels/ranking")
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
@@ -47,7 +48,10 @@ def test_map_data_score(app_client):
 
 def test_stale_flag(app_client):
     """FE-3: is_stale field present in ranking API response rows."""
-    app_client.post("/login", data={"password": "testpass"}, follow_redirects=True)
+    # Authenticate directly via session (avoids APP_PASSWORD env mismatch)
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
     resp = app_client.get("/api/vessels/ranking")
     assert resp.status_code == 200
     data = resp.get_json()
