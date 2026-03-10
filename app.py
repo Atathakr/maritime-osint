@@ -345,6 +345,20 @@ def api_vessels_ranking():
     })
 
 
+@app.get("/vessel/<path:imo>")
+@login_required
+def vessel_profile(imo):
+    """
+    Vessel profile permalink (FE-5).
+    Registered BEFORE /api/vessels/<path:imo> to avoid catch-all shadowing.
+    """
+    vessel = db.get_vessel(imo)
+    score = db.get_vessel_score(imo)
+    if not vessel and not score:
+        return render_template("vessel.html", imo=imo, vessel=None, score=None), 404
+    return render_template("vessel.html", imo=imo, vessel=vessel, score=score)
+
+
 @app.get("/api/vessels/<path:imo>")
 @login_required
 def api_vessel_detail(imo):
