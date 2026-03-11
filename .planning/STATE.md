@@ -4,12 +4,12 @@ milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Phase 7 plans created (07-00, 07-01, 07-02); plan checker PASS; ready for /gsd:execute-phase 7
+last_activity: 2026-03-10 — Plan 07-00 complete; 8 ALRT stubs in tests/test_alerts.py (8 failed, 0 errors confirmed)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 20
 ---
 
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 7 — Alert Generation and In-App Panel (Planned)
+Phase: 7 — Alert Generation and In-App Panel (Executing)
 Plan: 07-01 (Wave 1, not started)
-Status: Plans verified (3 plans, plan checker PASS); ready for /gsd:execute-phase 7
-Last activity: 2026-03-10 — Phase 7 plans created; 8 ALRT requirements mapped to 07-00/07-01/07-02
+Status: Plan 07-00 complete (8 stubs committed c5870dc); 07-01 ready to execute
+Last activity: 2026-03-10 — Plan 07-00 complete; tests/test_alerts.py created with 8 ALRT stubs
 
 Progress: [██░░░░░░░░] 20% (Phase 6/10 complete)
 
@@ -94,6 +94,12 @@ Progress: [██░░░░░░░░] 20% (Phase 6/10 complete)
 - [Phase 07]: IMO range IMO9000001+ reserved for Phase 7 tests (avoids collision with Phases 2-6)
 - [Phase 07]: POST /api/alerts/<id>/read is @csrf.exempt per Phase 4 decision (all /api/* POSTs exempt)
 - [Phase 07]: vessel_name stored as snapshot at alert insert time (deliberate denormalization — consistent with vessel_score_history pattern)
+
+### Decisions from Plan 7-00 (Wave 0 Test Stubs)
+
+- [Plan 07-00]: Eight stubs defined covering ALRT-01 through ALRT-08 in tests/test_alerts.py
+- [Plan 07-00]: IMO9000001+ range reserved for Phase 7 tests to avoid fixture collision with Phases 2-6
+- [Plan 07-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest at module level
 
 ### Pending Todos
 

@@ -47,14 +47,14 @@ All shipped and verified in production. See MILESTONES.md for details.
 
 ### Alerting
 
-- [ ] **ALRT-01**: Dashboard header shows a notification badge with unread alert count; badge is hidden when count is zero
-- [ ] **ALRT-02**: Analyst can open an alert panel listing all unread alerts: vessel name, alert type, score at trigger, time since triggered
-- [ ] **ALRT-03**: Analyst can click any alert to open a detail view showing: before/after composite score, before/after risk level, list of indicators that newly fired, and a "View Vessel →" link to the vessel profile
-- [ ] **ALRT-04**: Alert is generated when a vessel's risk level crosses a threshold in either direction (LOW↔MEDIUM↔HIGH↔CRITICAL); one alert per crossing event per scheduler run
-- [ ] **ALRT-05**: Alert is generated when a vessel enters the top 50 highest-scoring vessels list (was not in top 50 in the prior scheduler run)
-- [ ] **ALRT-06**: Alert is generated when a vessel's `is_sanctioned` field flips from false to true (newly matched against a sanctions list)
-- [ ] **ALRT-07**: Alert is generated when a vessel's composite score changes by 15 or more points in a single scheduler run
-- [ ] **ALRT-08**: Analyst can mark individual alerts as read (dismissed); unread badge count decrements accordingly; read alerts remain visible in a "read" section
+- [x] **ALRT-01**: Dashboard header shows a notification badge with unread alert count; badge is hidden when count is zero
+- [x] **ALRT-02**: Analyst can open an alert panel listing all unread alerts: vessel name, alert type, score at trigger, time since triggered
+- [x] **ALRT-03**: Analyst can click any alert to open a detail view showing: before/after composite score, before/after risk level, list of indicators that newly fired, and a "View Vessel →" link to the vessel profile
+- [x] **ALRT-04**: Alert is generated when a vessel's risk level crosses a threshold in either direction (LOW↔MEDIUM↔HIGH↔CRITICAL); one alert per crossing event per scheduler run
+- [x] **ALRT-05**: Alert is generated when a vessel enters the top 50 highest-scoring vessels list (was not in top 50 in the prior scheduler run)
+- [x] **ALRT-06**: Alert is generated when a vessel's `is_sanctioned` field flips from false to true (newly matched against a sanctions list)
+- [x] **ALRT-07**: Alert is generated when a vessel's composite score changes by 15 or more points in a single scheduler run
+- [x] **ALRT-08**: Analyst can mark individual alerts as read (dismissed); unread badge count decrements accordingly; read alerts remain visible in a "read" section
 
 ### Vessel Profile Enrichments
 
@@ -119,14 +119,14 @@ All shipped and verified in production. See MILESTONES.md for details.
 |-------------|-------|--------|
 | HIST-01 | Phase 6 | Pending |
 | HIST-02 | Phase 6 | Pending |
-| ALRT-01 | Phase 7 | Pending |
-| ALRT-02 | Phase 7 | Pending |
-| ALRT-03 | Phase 7 | Pending |
-| ALRT-04 | Phase 7 | Pending |
-| ALRT-05 | Phase 7 | Pending |
-| ALRT-06 | Phase 7 | Pending |
-| ALRT-07 | Phase 7 | Pending |
-| ALRT-08 | Phase 7 | Pending |
+| ALRT-01 | Phase 7 | Complete |
+| ALRT-02 | Phase 7 | Complete |
+| ALRT-03 | Phase 7 | Complete |
+| ALRT-04 | Phase 7 | Complete |
+| ALRT-05 | Phase 7 | Complete |
+| ALRT-06 | Phase 7 | Complete |
+| ALRT-07 | Phase 7 | Complete |
+| ALRT-08 | Phase 7 | Complete |
 | PROF-01 | Phase 8 | Pending |
 | PROF-02 | Phase 8 | Pending |
 | WTCH-01 | Phase 9 | Pending |
