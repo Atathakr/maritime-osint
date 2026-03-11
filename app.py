@@ -611,6 +611,35 @@ def api_vessel_history(imo):
     return jsonify({"history": history})
 
 
+# ── Alerts (Phase 7) ─────────────────────────────────────────────────────────
+
+@app.get("/api/alerts/unread-count")
+@login_required
+def api_alerts_unread_count():
+    """ALRT-01: Return unread alert count for badge display."""
+    return jsonify({"count": db.get_unread_count()})
+
+
+@app.get("/api/alerts")
+@login_required
+def api_alerts():
+    """ALRT-02/ALRT-03: Return unread and read alert lists for panel display."""
+    unread = db.get_alerts(is_read=0, limit=100)
+    read   = db.get_alerts(is_read=1, limit=50)
+    return jsonify({"unread": unread, "read": read})
+
+
+@app.post("/api/alerts/<int:alert_id>/read")
+@csrf.exempt
+@login_required
+def api_alert_mark_read(alert_id):
+    """ALRT-08: Mark one alert as read; return updated unread count."""
+    found = db.mark_alert_read(alert_id)
+    if not found:
+        return jsonify({"error": "Alert not found"}), 404
+    return jsonify({"ok": True, "count": db.get_unread_count()})
+
+
 @app.get("/api/vessels/<path:imo>")
 @login_required
 def api_vessel_detail(imo):
