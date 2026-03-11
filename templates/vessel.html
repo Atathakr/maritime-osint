@@ -59,6 +59,25 @@
     </div>
   </div>
 
+  <!-- Score History card — populated by vessel.js initHistorySection() -->
+  <div class="card" id="score-history-card" style="margin-bottom:1rem;">
+    <h3 style="margin-top:0;">Score History</h3>
+    <div id="score-history-content">
+      <p class="text-muted" id="score-history-placeholder" style="display:none;">
+        No score history yet — snapshots are recorded when the score changes.
+      </p>
+      <canvas id="score-history-chart" style="display:none;height:200px;max-height:220px;"></canvas>
+    </div>
+  </div>
+
+  <!-- Recent Changes card — populated by vessel.js initHistorySection() -->
+  <div class="card" id="recent-changes-card" style="margin-bottom:1rem;">
+    <h3 style="margin-top:0;">Recent Changes</h3>
+    <div id="recent-changes-content">
+      <p class="text-muted">Loading&hellip;</p>
+    </div>
+  </div>
+
   <!-- Indicator breakdown placeholder — populated in plan 05-03 -->
   <div class="card" id="indicator-section" style="display:none;">
     <h3 style="margin-top:0;">Indicator Breakdown</h3>
@@ -79,6 +98,8 @@
 </script>
 <!-- Pass IMO to vessel.js as a data attribute — no inline script needed (CSP compliance) -->
 <div id="vessel-data" data-imo="{{ imo }}" style="display:none;"></div>
+<!-- Chart.js via CDN — no defer; must be defined before vessel.js DOMContentLoaded -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='vessel.js') }}"></script>
 </body>
 </html>
