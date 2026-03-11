@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
-last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Plan 07-00 complete; 8 ALRT stubs in tests/test_alerts.py (8 failed, 0 errors confirmed)
+last_updated: "2026-03-11"
+last_activity: 2026-03-11 — Plan 07-01 complete; alerts table, _generate_alerts(), ALRT-04/05/06/07 passing
 progress:
-  total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 1
-  percent: 20
+  total_phases: 10
+  completed_phases: 6
+  total_plans: 22
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 7 — Alert Generation and In-App Panel (Executing)
-Plan: 07-01 (Wave 1, not started)
-Status: Plan 07-00 complete (8 stubs committed c5870dc); 07-01 ready to execute
-Last activity: 2026-03-10 — Plan 07-00 complete; tests/test_alerts.py created with 8 ALRT stubs
+Plan: 07-02 (Wave 2, ready to execute)
+Status: Plan 07-01 complete (alerts table, _generate_alerts(), ALRT-04/05/06/07 passing)
+Last activity: 2026-03-11 — Plan 07-01 complete; 4 backend stubs passing, 4 API stubs remain
 
-Progress: [██░░░░░░░░] 20% (Phase 6/10 complete)
+Progress: [██████████] 95%+ (Phase 7 in progress, plan 07-01 of 07 complete)
 
 ## Accumulated Context
 
@@ -100,6 +100,12 @@ Progress: [██░░░░░░░░] 20% (Phase 6/10 complete)
 - [Plan 07-00]: Eight stubs defined covering ALRT-01 through ALRT-08 in tests/test_alerts.py
 - [Plan 07-00]: IMO9000001+ range reserved for Phase 7 tests to avoid fixture collision with Phases 2-6
 - [Plan 07-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest at module level
+
+### Decisions from Plan 7-01 (Backend: alerts table, generation, scheduler hook)
+
+- [Plan 07-01]: lazy import: 'from app import _generate_alerts' moved inside test functions (not module-level) to prevent app.py's load_dotenv(override=True) from re-setting AISSTREAM_API_KEY during test collection
+- [Plan 07-01]: get_unread_count() and mark_alert_read() use plain conn.cursor() (not _cursor()) so fetchone()[0] and rowcount work identically on both SQLite and PostgreSQL backends
+- [Plan 07-01]: vessel_scores table has no risk_level column (only vessel_score_history does); test fixtures must not include risk_level in vessel_scores INSERT
 
 ### Pending Todos
 
