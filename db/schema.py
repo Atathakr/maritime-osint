@@ -48,6 +48,8 @@ def init_db() -> None:
     _migrate_vessels_canonical()
     from .scores import init_scores_tables  # noqa: WPS433 (local import avoids circular)
     init_scores_tables()
+    from .alerts import init_alerts_table  # noqa: WPS433
+    init_alerts_table()
 
 
 def _init_postgres(c) -> None:

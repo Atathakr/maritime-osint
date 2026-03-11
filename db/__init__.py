@@ -78,3 +78,9 @@ from .scores import (  # noqa: F401
     get_score_history,
     archive_old_ais_positions,
 )
+
+# ── Alerts (Phase 7) ──────────────────────────────────────────────────────────
+from .alerts import (  # noqa: F401
+    init_alerts_table, insert_alert, get_alerts,
+    get_unread_count, mark_alert_read,
+)
