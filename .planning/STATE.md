@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
-last_updated: "2026-03-11T16:56:53.809Z"
+last_updated: "2026-03-11T17:38:21.480Z"
 last_activity: 2026-03-11 — Plan 07-02 complete; all ALRT-01 through ALRT-08 pass
 progress:
   total_phases: 10
   completed_phases: 7
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 24
+  completed_plans: 23
 ---
 
 ---
@@ -39,12 +39,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 7 — Alert Generation and In-App Panel (Complete)
-Plan: 07-02 complete (all 8 ALRT tests passing, API routes + JS + CSS done)
-Status: Phase 7 fully complete. Next: Phase 8 (vessel profile enrichments)
-Last activity: 2026-03-11 — Plan 07-02 complete; all ALRT-01 through ALRT-08 pass
+Phase: 8 — Vessel Profile Enrichments (In Progress)
+Plan: 08-00 complete (4 PROF stubs created, RED phase done)
+Status: Phase 8 Wave 0 complete. Next: Plan 08-01 (Wave 1 GREEN — implementation)
+Last activity: 2026-03-11 — Plan 08-00 complete; 4 PROF test stubs created and failing on pytest.fail("stub")
 
-Progress: [██████████] 100% (Phase 7 complete)
+Progress: [██████████] 96% (23/24 plans complete)
 
 ## Accumulated Context
 
@@ -127,6 +127,12 @@ Progress: [██████████] 100% (Phase 7 complete)
 - [Plan 07-02]: Alert CSS appended directly to static/style.css after @imports (valid CSS per spec) — keeps Phase 7 scope in one commit vs adding a new import file
 - [Plan 07-02]: test_conftest_guards DATABASE_URL failure in full suite is pre-existing (caused by ALRT-04/07 calling db._init_backend()) — not introduced or worsened by Plan 07-02
 - [Plan 07-02]: Slide-in panel pattern established: #alert-panel (fixed right) + #alert-overlay (full-screen dim), toggled together via JS addEventListener
+
+### Decisions from Plan 8-00 (Wave 0 Test Stubs)
+
+- [Plan 08-00]: Four stubs defined covering PROF-01 (test_profile_has_history_card, test_history_single_snapshot) and PROF-02 (test_change_log_diff, test_change_log_identical_snapshots)
+- [Plan 08-00]: IMO range IMO0200001+ reserved for Phase 8 tests (no collision with Phases 2-7)
+- [Plan 08-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest at module level
 
 ### Pending Todos
 

@@ -58,8 +58,8 @@ All shipped and verified in production. See MILESTONES.md for details.
 
 ### Vessel Profile Enrichments
 
-- [ ] **PROF-01**: Vessel profile shows a score trend chart displaying the vessel's composite score over the last 30 snapshots, with timestamps on the x-axis
-- [ ] **PROF-02**: Vessel profile shows a change log summarizing what changed in the most recent scheduler run: score delta (e.g. "▲ +12 pts"), risk level change if any, and names of indicators that newly fired or newly cleared since the prior snapshot
+- [x] **PROF-01**: Vessel profile shows a score trend chart displaying the vessel's composite score over the last 30 snapshots, with timestamps on the x-axis
+- [x] **PROF-02**: Vessel profile shows a change log summarizing what changed in the most recent scheduler run: score delta (e.g. "▲ +12 pts"), risk level change if any, and names of indicators that newly fired or newly cleared since the prior snapshot
 
 ### Watchlist
 
@@ -127,8 +127,8 @@ All shipped and verified in production. See MILESTONES.md for details.
 | ALRT-06 | Phase 7 | Complete |
 | ALRT-07 | Phase 7 | Complete |
 | ALRT-08 | Phase 7 | Complete |
-| PROF-01 | Phase 8 | Pending |
-| PROF-02 | Phase 8 | Pending |
+| PROF-01 | Phase 8 | Complete |
+| PROF-02 | Phase 8 | Complete |
 | WTCH-01 | Phase 9 | Pending |
 | WTCH-02 | Phase 9 | Pending |
 | WTCH-03 | Phase 9 | Pending |
