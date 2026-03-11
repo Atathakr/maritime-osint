@@ -205,3 +205,40 @@
   color: #9ca3af;
   font-size: 0.875rem;
 }
+
+/* ── Phase 8: Vessel Profile History ─────────────────────────────────── */
+
+.history-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.history-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 8rem;
+  flex-shrink: 0;
+}
+
+.history-value {
+  font-size: 0.9rem;
+}
+
+.history-delta {
+  font-weight: 600;
+}
+
+.history-fired {
+  color: #dc2626;
+}
+
+.history-cleared {
+  color: #16a34a;
+}

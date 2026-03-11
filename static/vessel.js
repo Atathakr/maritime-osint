@@ -144,6 +144,184 @@
     section.style.display = 'block';
   }
 
+  // ── History section (Phase 8 PROF-01 + PROF-02) ──────────────────────────
+
+  var RISK_COLOR = {
+    CRITICAL: '#dc2626',
+    HIGH:     '#ea580c',
+    MEDIUM:   '#d97706',
+    LOW:      '#16a34a',
+  };
+
+  function renderScoreHistoryCard(history) {
+    var placeholder = document.getElementById('score-history-placeholder');
+    var canvas      = document.getElementById('score-history-chart');
+    if (!canvas) return;
+
+    if (!history || history.length === 0) {
+      if (placeholder) placeholder.style.display = 'block';
+      return;
+    }
+
+    // history[0] is most recent; chart shows oldest→newest (reverse)
+    var reversed    = history.slice().reverse();
+    var labels      = reversed.map(function(row) { return relativeTime(row.recorded_at); });
+    var scores      = reversed.map(function(row) { return row.composite_score; });
+    var pointColors = reversed.map(function(row) {
+      return RISK_COLOR[row.risk_level] || '#9ca3af';
+    });
+    var riskLevels  = reversed.map(function(row) { return row.risk_level || 'UNKNOWN'; });
+
+    if (placeholder) placeholder.style.display = 'none';
+    canvas.style.display = 'block';
+
+    // Destroy previous instance if re-initialised (e.g. dev hot reload)
+    if (window._scoreChart) {
+      window._scoreChart.destroy();
+      window._scoreChart = null;
+    }
+
+    window._scoreChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: scores,
+          borderColor: '#374151',
+          borderWidth: 2,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointColors,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          tension: 0.2,
+          fill: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                var i = ctx.dataIndex;
+                return 'Score: ' + ctx.parsed.y + ' \u00b7 ' + riskLevels[i] + ' \u00b7 ' + labels[i];
+              },
+            },
+          },
+        },
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { stepSize: 20 },
+          },
+          x: {
+            ticks: { maxTicksLimit: 8 },
+          },
+        },
+      },
+    });
+  }
+
+  function renderRecentChangesCard(history, indicatorNameMap) {
+    var container = document.getElementById('recent-changes-content');
+    if (!container) return;
+
+    // Zero snapshots
+    if (!history || history.length === 0) {
+      container.innerHTML = '<p class="text-muted">No changes recorded yet.</p>';
+      return;
+    }
+
+    // Exactly 1 snapshot — no prior to compare
+    if (history.length === 1) {
+      container.innerHTML = '<p class="text-muted">No prior snapshot to compare \u2014 this is the first recorded score.</p>';
+      return;
+    }
+
+    var snap0 = history[0];  // most recent
+    var snap1 = history[1];  // prior
+
+    var ind0 = snap0.indicator_json || {};
+    var ind1 = snap1.indicator_json || {};
+
+    var delta = snap0.composite_score - snap1.composite_score;
+
+    // Identical case
+    if (delta === 0 && snap0.risk_level === snap1.risk_level && Object.keys(ind0).join(',') === Object.keys(ind1).join(',')) {
+      container.innerHTML = '<p class="text-muted">No changes since last run.</p>';
+      return;
+    }
+
+    var parts = [];
+
+    // Score delta row
+    var arrow = delta > 0 ? '\u25b2' : (delta < 0 ? '\u25bc' : '');
+    var sign  = delta > 0 ? '+' : '';
+    parts.push('<div class="history-row"><span class="history-label">Score delta</span>'
+      + '<span class="history-value history-delta">' + escHtml(arrow + ' ' + sign + delta + ' pts') + '</span></div>');
+
+    // Risk level change row — only if changed
+    if (snap0.risk_level !== snap1.risk_level) {
+      parts.push('<div class="history-row"><span class="history-label">Risk level</span>'
+        + '<span class="history-value">' + escHtml(snap1.risk_level + ' \u2192 ' + snap0.risk_level) + '</span></div>');
+    }
+
+    // Newly fired indicators (in snap0 but not snap1)
+    var fired = Object.keys(ind0).filter(function(k) { return !ind1.hasOwnProperty(k); });
+    if (fired.length > 0) {
+      var firedNames = fired.map(function(k) {
+        return escHtml(indicatorNameMap[k] || k);
+      }).join(', ');
+      parts.push('<div class="history-row"><span class="history-label">Newly fired</span>'
+        + '<span class="history-value history-fired">' + firedNames + '</span></div>');
+    }
+
+    // Newly cleared indicators (in snap1 but not snap0)
+    var cleared = Object.keys(ind1).filter(function(k) { return !ind0.hasOwnProperty(k); });
+    if (cleared.length > 0) {
+      var clearedNames = cleared.map(function(k) {
+        return escHtml(indicatorNameMap[k] || k);
+      }).join(', ');
+      parts.push('<div class="history-row"><span class="history-label">Newly cleared</span>'
+        + '<span class="history-value history-cleared">' + clearedNames + '</span></div>');
+    }
+
+    container.innerHTML = '<div class="history-log">' + parts.join('') + '</div>';
+  }
+
+  function initHistorySection() {
+    // Build indicator name map from server-injected meta
+    var indicatorNameMap = {};
+    var metaEl = document.getElementById('indicator-meta');
+    if (metaEl) {
+      try {
+        var meta = JSON.parse(metaEl.textContent);
+        meta.forEach(function(m) { indicatorNameMap[m.id] = m.name; });
+      } catch (e) {}
+    }
+
+    // Read IMO from data attribute
+    var imoEl = document.getElementById('vessel-data');
+    var imo = imoEl ? imoEl.getAttribute('data-imo') : null;
+    if (!imo) return;
+
+    fetch('/api/vessels/' + encodeURIComponent(imo) + '/history')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var history = data.history || [];
+        renderScoreHistoryCard(history);
+        renderRecentChangesCard(history, indicatorNameMap);
+      })
+      .catch(function() {
+        // Silently degrade — cards show whatever placeholder text is in HTML
+        var container = document.getElementById('recent-changes-content');
+        if (container) container.innerHTML = '<p class="text-muted">Unable to load history.</p>';
+      });
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -154,6 +332,7 @@
     }
     renderScoreHero(score);
     renderIndicatorTable(score);
+    initHistorySection();
   });
 
 }());
