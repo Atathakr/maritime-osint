@@ -195,6 +195,6 @@ Plans:
 | 5. Frontend UX | v1.0 | 4/4 | Complete | 2026-03-10 |
 | 6. Score History Infrastructure | 2/2 | Complete   | 2026-03-10 | - |
 | 7. Alert Generation and In-App Panel | 3/3 | Complete   | 2026-03-11 | - |
-| 8. Vessel Profile Enrichments | 2/2 | Complete   | 2026-03-11 | - |
+| 8. Vessel Profile Enrichments | 2/2 | Complete    | 2026-03-11 | - |
 | 9. Watchlist | v1.1 | 0/? | Not started | - |
 | 10. Visual Legibility Pass | v1.1 | 0/? | Not started | - |
