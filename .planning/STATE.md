@@ -3,10 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
+last_updated: "2026-03-11T17:45:42.498Z"
+last_activity: 2026-03-11 — Plan 08-00 complete; 4 PROF test stubs created and failing on pytest.fail("stub")
+progress:
+  total_phases: 10
+  completed_phases: 8
+  total_plans: 24
+  completed_plans: 24
+  percent: 100
+---
+
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Analyst Workflow
+status: executing
 last_updated: "2026-03-11T17:38:21.480Z"
 last_activity: 2026-03-11 — Plan 07-02 complete; all ALRT-01 through ALRT-08 pass
 progress:
-  total_phases: 10
+  [██████████] 100%
   completed_phases: 7
   total_plans: 24
   completed_plans: 23
@@ -39,12 +54,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 8 — Vessel Profile Enrichments (In Progress)
-Plan: 08-00 complete (4 PROF stubs created, RED phase done)
-Status: Phase 8 Wave 0 complete. Next: Plan 08-01 (Wave 1 GREEN — implementation)
-Last activity: 2026-03-11 — Plan 08-00 complete; 4 PROF test stubs created and failing on pytest.fail("stub")
+Phase: 8 — Vessel Profile Enrichments (COMPLETE)
+Plan: 08-01 complete (all 4 PROF tests GREEN, Score History + Recent Changes cards shipped)
+Status: Phase 8 complete. All 24/24 plans complete. Next: Phase 9 (Watchlist) or Phase 10 (Visual Legibility).
+Last activity: 2026-03-11 — Plan 08-01 complete; Chart.js history chart + Recent Changes change log + 167 tests passing
 
-Progress: [██████████] 96% (23/24 plans complete)
+Progress: [██████████] 100% (24/24 plans complete)
 
 ## Accumulated Context
 
@@ -133,6 +148,13 @@ Progress: [██████████] 96% (23/24 plans complete)
 - [Plan 08-00]: Four stubs defined covering PROF-01 (test_profile_has_history_card, test_history_single_snapshot) and PROF-02 (test_change_log_diff, test_change_log_identical_snapshots)
 - [Plan 08-00]: IMO range IMO0200001+ reserved for Phase 8 tests (no collision with Phases 2-7)
 - [Plan 08-00]: Wave 0 stub pattern: pytest.fail("stub") in every test body, no imports beyond os and pytest at module level
+
+### Decisions from Plan 8-01 (GREEN — Score History chart + Recent Changes log)
+
+- [Plan 08-01]: Chart.js 4.4.4 loaded via CDN (cdn.jsdelivr.net, already in CSP allowlist) without defer — must be synchronously available before vessel.js DOMContentLoaded fires
+- [Plan 08-01]: initHistorySection() silently degrades on fetch error — shows "Unable to load history" message, does not break rest of page
+- [Plan 08-01]: Identical-snapshot detection: delta===0 and same risk_level and same indicator key order (not full deep-equal — sufficient per CONTEXT.md)
+- [Plan 08-01]: PROF tests validate /api/vessels/<imo>/history JSON shape and snapshot ordering (not DOM rendering — Flask test client cannot execute browser JS)
 
 ### Pending Todos
 
