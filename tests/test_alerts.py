@@ -7,6 +7,7 @@ Stubs written in Wave 0 (Plan 07-00). Made to pass in Waves 1-2 (Plans 07-01, 07
 
 IMO range: IMO9000001+ (no collision with Phases 2-6).
 """
+import json
 import os
 import pytest
 
@@ -32,21 +33,97 @@ def _flush_alerts(db_path):
 
 # ── ALRT-01: unread count endpoint ───────────────────────────────────────────
 
-def test_unread_count_endpoint(app_client):
+def test_unread_count_endpoint(app_client, monkeypatch):
     """ALRT-01: GET /api/alerts/unread-count returns {"count": N} as integer."""
-    pytest.fail("stub")
+    monkeypatch.setenv("DATABASE_URL", "")
+    db._init_backend()
+    db.init_db()
+    _flush_alerts(db._sqlite_path())
+
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    # Insert one unread alert via db layer
+    db.insert_alert(
+        imo="IMO9000010", vessel_name="Count Test Vessel",
+        alert_type="score_spike", before_score=20, after_score=40,
+        before_risk_level="LOW", after_risk_level="MEDIUM",
+        score_at_trigger=40, new_indicators=[],
+    )
+
+    resp = app_client.get("/api/alerts/unread-count")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.get_json()
+    assert "count" in data, f"Response missing 'count' key: {data}"
+    assert isinstance(data["count"], int), f"count must be int, got {type(data['count'])}: {data}"
+    assert data["count"] >= 1, f"Expected count >= 1 after insert, got {data['count']}"
 
 
 # ── ALRT-02 / ALRT-03: alert panel API shape ─────────────────────────────────
 
-def test_get_alerts_shape(app_client):
+def test_get_alerts_shape(app_client, monkeypatch):
     """ALRT-02: GET /api/alerts returns {"unread": [...], "read": [...]} with required fields."""
-    pytest.fail("stub")
+    monkeypatch.setenv("DATABASE_URL", "")
+    db._init_backend()
+    db.init_db()
+    _flush_alerts(db._sqlite_path())
+
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    db.insert_alert(
+        imo="IMO9000011", vessel_name="Shape Test Vessel",
+        alert_type="sanctions_match", before_score=30, after_score=100,
+        before_risk_level="MEDIUM", after_risk_level="CRITICAL",
+        score_at_trigger=100, new_indicators=["IND5"],
+    )
+
+    resp = app_client.get("/api/alerts")
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+    data = resp.get_json()
+    assert "unread" in data, f"Response missing 'unread' key: {data}"
+    assert "read" in data, f"Response missing 'read' key: {data}"
+    assert len(data["unread"]) >= 1, f"Expected at least 1 unread alert, got {len(data['unread'])}"
+
+    required_fields = ("vessel_name", "alert_type", "score_at_trigger", "triggered_at")
+    for field in required_fields:
+        assert field in data["unread"][0], (
+            f"ALRT-02: Missing field '{field}' in unread alert: {data['unread'][0]}"
+        )
 
 
-def test_alert_detail_fields(app_client):
+def test_alert_detail_fields(app_client, monkeypatch):
     """ALRT-03: Each alert row has before_score, after_score, before/after risk_level, new_indicators_json."""
-    pytest.fail("stub")
+    monkeypatch.setenv("DATABASE_URL", "")
+    db._init_backend()
+    db.init_db()
+    _flush_alerts(db._sqlite_path())
+
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    db.insert_alert(
+        imo="IMO9000012", vessel_name="Detail Test Vessel",
+        alert_type="risk_level_crossing", before_score=35, after_score=72,
+        before_risk_level="LOW", after_risk_level="HIGH",
+        score_at_trigger=72, new_indicators=["IND2", "IND3"],
+    )
+
+    resp = app_client.get("/api/alerts")
+    data = resp.get_json()
+    assert data["unread"], "Expected at least one unread alert for detail test"
+    alert = data["unread"][0]
+
+    detail_fields = ("before_score", "after_score", "before_risk_level", "after_risk_level", "new_indicators_json")
+    for field in detail_fields:
+        assert field in alert, f"ALRT-03: Missing detail field '{field}' in alert: {alert}"
+
+    assert isinstance(alert["new_indicators_json"], list), (
+        f"new_indicators_json must be a list, got {type(alert['new_indicators_json'])}"
+    )
+    assert "IND2" in alert["new_indicators_json"], (
+        f"Expected IND2 in new_indicators_json, got: {alert['new_indicators_json']}"
+    )
 
 
 # ── ALRT-04: risk level crossing ─────────────────────────────────────────────
@@ -159,6 +236,53 @@ def test_score_spike_alert(monkeypatch):
 
 # ── ALRT-08: mark alert read ─────────────────────────────────────────────────
 
-def test_mark_alert_read(app_client):
+def test_mark_alert_read(app_client, monkeypatch):
     """ALRT-08: POST /api/alerts/<id>/read sets is_read=1; GET /api/alerts/unread-count decrements."""
-    pytest.fail("stub")
+    monkeypatch.setenv("DATABASE_URL", "")
+    db._init_backend()
+    db.init_db()
+    _flush_alerts(db._sqlite_path())
+
+    with app_client.session_transaction() as sess:
+        sess["authenticated"] = True
+
+    # Insert one unread alert
+    db.insert_alert(
+        imo="IMO9000013", vessel_name="Read Test Vessel",
+        alert_type="score_spike", before_score=10, after_score=30,
+        before_risk_level="LOW", after_risk_level="LOW",
+        score_at_trigger=30, new_indicators=[],
+    )
+
+    # Confirm it shows in unread
+    unread_before = app_client.get("/api/alerts/unread-count").get_json()["count"]
+    assert unread_before >= 1, f"Expected >= 1 unread before mark-read, got {unread_before}"
+
+    # Retrieve the alert ID
+    alerts_resp = app_client.get("/api/alerts").get_json()
+    assert alerts_resp["unread"], "No unread alerts found before mark-read"
+    alert_id = alerts_resp["unread"][0]["id"]
+
+    # Mark as read
+    mark_resp = app_client.post(f"/api/alerts/{alert_id}/read")
+    assert mark_resp.status_code == 200, f"Expected 200 from mark-read, got {mark_resp.status_code}"
+    mark_data = mark_resp.get_json()
+    assert mark_data.get("ok") is True, f"Expected ok=True, got: {mark_data}"
+    assert isinstance(mark_data.get("count"), int), f"count must be int, got: {mark_data}"
+
+    # Verify badge count decremented
+    unread_after = app_client.get("/api/alerts/unread-count").get_json()["count"]
+    assert unread_after == unread_before - 1, (
+        f"Unread count should have decremented from {unread_before} to {unread_before - 1}, got {unread_after}"
+    )
+
+    # Verify alert moved to read section
+    final_alerts = app_client.get("/api/alerts").get_json()
+    unread_ids = [a["id"] for a in final_alerts["unread"]]
+    read_ids   = [a["id"] for a in final_alerts["read"]]
+    assert alert_id not in unread_ids, f"Alert {alert_id} still in unread after mark-read"
+    assert alert_id in read_ids, f"Alert {alert_id} not in read section after mark-read"
+
+    # Verify 404 for non-existent alert
+    bad_resp = app_client.post("/api/alerts/99999999/read")
+    assert bad_resp.status_code == 404, f"Expected 404 for unknown alert, got {bad_resp.status_code}"
