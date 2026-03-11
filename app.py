@@ -161,11 +161,75 @@ def _score_changed(prior: dict, fresh: dict) -> bool:
     return prior_ind != fresh_ind
 
 
+def _generate_alerts(
+    imo: str,
+    vessel_name: str | None,
+    prior: dict,
+    fresh: dict,
+    was_in_top_50: bool,  # noqa: ARG001 — used by caller for ALRT-05; not used inside
+) -> None:
+    """
+    Evaluate all per-vessel alert conditions (ALRT-04, ALRT-06, ALRT-07).
+    ALRT-05 (top-50 entry) is handled by _do_score_refresh() after the loop.
+
+    Only call this function when prior is non-empty (caller must guard with `if prior:`).
+    """
+    import json as _json
+
+    prior_score = int(prior.get("composite_score", 0))
+    fresh_score  = int(fresh.get("composite_score", 0))
+    prior_sanctioned = bool(prior.get("is_sanctioned"))
+    fresh_sanctioned = bool(fresh.get("is_sanctioned"))
+
+    def _risk(score, sanctioned):
+        if sanctioned: return "CRITICAL"
+        if score >= 70: return "HIGH"
+        if score >= 40: return "MEDIUM"
+        return "LOW"
+
+    prior_risk = prior.get("risk_level") or _risk(prior_score, prior_sanctioned)
+    fresh_risk = _risk(fresh_score, fresh_sanctioned)
+
+    # Compute newly fired indicators: keys in fresh not in prior
+    # indicator_json only stores FIRED indicators (Phase 5 decision)
+    prior_ind = prior.get("indicator_json") or {}
+    fresh_ind  = fresh.get("indicator_json") or {}
+    if isinstance(prior_ind, str):
+        try: prior_ind = _json.loads(prior_ind)
+        except Exception: prior_ind = {}
+    if isinstance(fresh_ind, str):
+        try: fresh_ind = _json.loads(fresh_ind)
+        except Exception: fresh_ind = {}
+    new_indicators = [k for k in fresh_ind if k not in prior_ind]
+
+    common_args = dict(
+        imo=imo, vessel_name=vessel_name,
+        before_score=prior_score, after_score=fresh_score,
+        before_risk_level=prior_risk, after_risk_level=fresh_risk,
+        score_at_trigger=fresh_score, new_indicators=new_indicators,
+    )
+
+    # ALRT-04: risk level crossing in either direction
+    if prior_risk != fresh_risk:
+        db.insert_alert(alert_type="risk_level_crossing", **common_args)
+
+    # ALRT-06: sanctions flip false → true
+    if not prior_sanctioned and fresh_sanctioned:
+        db.insert_alert(alert_type="sanctions_match", **common_args)
+
+    # ALRT-07: score spike >= 15 points in either direction
+    if abs(fresh_score - prior_score) >= 15:
+        db.insert_alert(alert_type="score_spike", **common_args)
+
+
 def _do_score_refresh() -> None:
     """Iterate over all known vessel_scores rows and recompute each score."""
     import logging
     log = logging.getLogger(__name__)
     rows = db.get_all_vessel_scores()
+    # ALRT-05: capture top-50 IMOs from last run's scores (pre-refresh)
+    # NOTE: if fleet < 50 vessels, every vessel is always "in top 50" and ALRT-05 never fires
+    top_50_before = {r["imo_number"] for r in rows[:50]}
     refreshed = 0
     for row in rows:
         imo = row.get("imo_number")
@@ -180,10 +244,44 @@ def _do_score_refresh() -> None:
             if not prior or _score_changed(prior[0], fresh):
                 db.append_score_history(imo, fresh)
 
+            # ALRT-04, ALRT-06, ALRT-07: generate per-vessel alerts if prior snapshot exists
+            if prior:
+                _generate_alerts(
+                    imo=imo,
+                    vessel_name=row.get("entity_name"),
+                    prior=prior[0],
+                    fresh=fresh,
+                    was_in_top_50=(imo in top_50_before),
+                )
+
             refreshed += 1
         except Exception:
             log.exception("[scheduler] failed to refresh score for IMO %s", imo)
+
     log.info("[scheduler] score refresh complete: %d vessels refreshed", refreshed)
+
+    # ALRT-05: two-pass top-50 entry detection
+    # Re-query after all upserts so new scores are visible
+    new_rows = db.get_all_vessel_scores()
+    top_50_after = {r["imo_number"] for r in new_rows[:50]}
+    newly_entered = top_50_after - top_50_before
+    for r in new_rows:
+        if r["imo_number"] not in newly_entered:
+            continue
+        prior_hist = db.get_score_history(r["imo_number"], limit=1)
+        prior_score = int(prior_hist[0].get("composite_score", 0)) if prior_hist else 0
+        prior_risk = prior_hist[0].get("risk_level", "LOW") if prior_hist else "LOW"
+        db.insert_alert(
+            imo=r["imo_number"],
+            vessel_name=r.get("entity_name"),
+            alert_type="top_50_entry",
+            before_score=prior_score,
+            after_score=r.get("composite_score"),
+            before_risk_level=prior_risk,
+            after_risk_level=r.get("risk_level") or "LOW",
+            score_at_trigger=r.get("composite_score"),
+            new_indicators=[],
+        )
 
 
 def _archive_ais_job() -> None:
