@@ -16,10 +16,7 @@ _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
     print("[maritime-osint] SECRET_KEY is required. Set it in your environment or .env file. See .env.example.")
     sys.exit(1)
-_app_password = os.environ.get("APP_PASSWORD")
-if not _app_password:
-    print("[maritime-osint] APP_PASSWORD is required. Set it in your environment or .env file. See .env.example.")
-    sys.exit(1)
+_app_password = os.environ.get("APP_PASSWORD")  # Optional — omit to disable auth entirely
 # ── End startup enforcement ──────────────────────────────────────────────────
 
 from functools import wraps
