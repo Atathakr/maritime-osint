@@ -144,10 +144,11 @@ Plans:
   2. A vessel with only one history snapshot shows a single-point chart rather than an error.
   3. The vessel profile page shows a change log entry for the most recent scheduler run that produced a snapshot: score delta with direction arrow (e.g. "▲ +12 pts"), risk level change if any, indicator names that newly fired, and indicator names that newly cleared.
   4. A vessel whose most recent snapshot is identical to the prior one shows "No changes since last run" in the change log rather than an empty section.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-00-PLAN.md — Wave 0: Create tests/test_profile_enrichments.py with 4 failing stubs (PROF-01, PROF-02)
+- [ ] 08-01-PLAN.md — Wave 1: vessel.html (two new cards + Chart.js CDN tag) + vessel.js (initHistorySection) + style.css (history card CSS); all 4 stubs pass
 
 #### Phase 9: Watchlist
 **Goal**: Let the analyst permanently pin high-interest vessels to the top of the ranking table so they appear first on every session without sorting or searching.
@@ -194,6 +195,6 @@ Plans:
 | 5. Frontend UX | v1.0 | 4/4 | Complete | 2026-03-10 |
 | 6. Score History Infrastructure | 2/2 | Complete   | 2026-03-10 | - |
 | 7. Alert Generation and In-App Panel | 3/3 | Complete   | 2026-03-11 | - |
-| 8. Vessel Profile Enrichments | v1.1 | 0/? | Not started | - |
+| 8. Vessel Profile Enrichments | v1.1 | 0/2 | Not started | - |
 | 9. Watchlist | v1.1 | 0/? | Not started | - |
 | 10. Visual Legibility Pass | v1.1 | 0/? | Not started | - |
