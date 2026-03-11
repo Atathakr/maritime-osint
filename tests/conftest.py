@@ -6,6 +6,11 @@ collects any test files. Module-level code in conftest.py runs before test colle
 
 Using os.environ["DATABASE_URL"] = "" (not setdefault) because setdefault is a no-op
 when CI already exports DATABASE_URL=postgresql://..., which would connect to production.
+
+Phase 7 note: app.py calls load_dotenv(override=True) at module level. The first test
+that uses app_client (or lazy-imports app) triggers that load, which restores
+AISSTREAM_API_KEY from .env. The _clear_polluted_env autouse fixture re-clears these
+vars before every test so test_conftest_guards.py stays green regardless of test order.
 """
 import os
 import pytest
@@ -14,6 +19,14 @@ import pytest
 # This matches the pattern used in test_scores.py (os.environ["DATABASE_URL"] = "").
 os.environ["DATABASE_URL"] = ""
 os.environ.pop("AISSTREAM_API_KEY", None)
+
+
+@pytest.fixture(autouse=True)
+def _clear_polluted_env():
+    """Re-clear vars that app.load_dotenv(override=True) may restore on first app import."""
+    os.environ["DATABASE_URL"] = ""
+    os.environ.pop("AISSTREAM_API_KEY", None)
+    yield
 
 
 @pytest.fixture(scope="session")
