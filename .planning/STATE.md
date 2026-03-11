@@ -4,13 +4,14 @@ milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
 last_updated: "2026-03-11"
-last_activity: 2026-03-11 — Plan 07-01 complete; alerts table, _generate_alerts(), ALRT-04/05/06/07 passing
+last_activity: 2026-03-11 — Plan 07-02 complete; all 8 ALRT tests passing, alert API routes + JS badge/panel + CSS complete
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
   completed_plans: 22
   percent: 100
+  bar: "[██████████] 100%"
 ---
 
 # Project State
@@ -24,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 7 — Alert Generation and In-App Panel (Executing)
-Plan: 07-02 (Wave 2, ready to execute)
-Status: Plan 07-01 complete (alerts table, _generate_alerts(), ALRT-04/05/06/07 passing)
-Last activity: 2026-03-11 — Plan 07-01 complete; 4 backend stubs passing, 4 API stubs remain
+Phase: 7 — Alert Generation and In-App Panel (Complete)
+Plan: 07-02 complete (all 8 ALRT tests passing, API routes + JS + CSS done)
+Status: Phase 7 fully complete. Next: Phase 8 (vessel profile enrichments)
+Last activity: 2026-03-11 — Plan 07-02 complete; all ALRT-01 through ALRT-08 pass
 
-Progress: [██████████] 95%+ (Phase 7 in progress, plan 07-01 of 07 complete)
+Progress: [██████████] 100% (Phase 7 complete)
 
 ## Accumulated Context
 
@@ -106,6 +107,12 @@ Progress: [██████████] 95%+ (Phase 7 in progress, plan 07-01
 - [Plan 07-01]: lazy import: 'from app import _generate_alerts' moved inside test functions (not module-level) to prevent app.py's load_dotenv(override=True) from re-setting AISSTREAM_API_KEY during test collection
 - [Plan 07-01]: get_unread_count() and mark_alert_read() use plain conn.cursor() (not _cursor()) so fetchone()[0] and rowcount work identically on both SQLite and PostgreSQL backends
 - [Plan 07-01]: vessel_scores table has no risk_level column (only vessel_score_history does); test fixtures must not include risk_level in vessel_scores INSERT
+
+### Decisions from Plan 7-02 (API routes, frontend JS, badge/panel HTML)
+
+- [Plan 07-02]: Alert CSS appended directly to static/style.css after @imports (valid CSS per spec) — keeps Phase 7 scope in one commit vs adding a new import file
+- [Plan 07-02]: test_conftest_guards DATABASE_URL failure in full suite is pre-existing (caused by ALRT-04/07 calling db._init_backend()) — not introduced or worsened by Plan 07-02
+- [Plan 07-02]: Slide-in panel pattern established: #alert-panel (fixed right) + #alert-overlay (full-screen dim), toggled together via JS addEventListener
 
 ### Pending Todos
 
