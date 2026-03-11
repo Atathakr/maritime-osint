@@ -3,29 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Analyst Workflow
 status: executing
-last_updated: "2026-03-10T15:51:38.322Z"
-last_activity: 2026-03-10 — Plan 6-01 executed; vessel_score_history migrated, change-detection added, GET /api/vessels/<imo>/history live
-progress:
-  total_phases: 10
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
----
-
----
-gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Analyst Workflow
-status: executing
-stopped_at: "Completed 06-01-PLAN.md"
 last_updated: "2026-03-10"
-last_activity: 2026-03-10 — Plan 6-01 complete; HIST-01 and HIST-02 implemented; 155 tests passing
+last_activity: 2026-03-10 — Phase 7 plans created (07-00, 07-01, 07-02); plan checker PASS; ready for /gsd:execute-phase 7
 progress:
-  total_phases: 10
-  completed_phases: 6
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  total_phases: 5
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 0
+  percent: 20
 ---
 
 # Project State
@@ -39,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 6 — Score History Infrastructure (Complete)
-Plan: 06-01 complete — HIST-01 and HIST-02 implemented; all 4 acceptance tests pass
-Status: Phase 6 complete; ready for Phase 7 (alerts) planning
-Last activity: 2026-03-10 — Plan 6-01 executed; vessel_score_history migrated, change-detection added, GET /api/vessels/<imo>/history live
+Phase: 7 — Alert Generation and In-App Panel (Planned)
+Plan: 07-01 (Wave 1, not started)
+Status: Plans verified (3 plans, plan checker PASS); ready for /gsd:execute-phase 7
+Last activity: 2026-03-10 — Phase 7 plans created; 8 ALRT requirements mapped to 07-00/07-01/07-02
 
-Progress: [██████████] 100%
+Progress: [██░░░░░░░░] 20% (Phase 6/10 complete)
 
 ## Accumulated Context
 
@@ -98,6 +83,17 @@ Progress: [██████████] 100%
 - [Plan 06-01]: _score_changed() compares composite_score, is_sanctioned, and indicator_json (normalised to dict) — both sides normalised before comparison
 - [Plan 06-01]: GET /api/vessels/<imo>/history registered before <path:imo> catch-all in app.py to prevent Flask route shadowing
 - [Plan 06-01]: API exposes computed_at as recorded_at for downstream consumers (alert generation, trend chart)
+
+### Decisions from Phase 7 Planning
+
+- [Phase 07]: alerts table: dual-backend DDL (BIGSERIAL/TIMESTAMPTZ/JSONB Postgres; INTEGER AUTOINCREMENT/TEXT/TEXT SQLite); follows exact db/scores.py pattern
+- [Phase 07]: alert_type TEXT enum: "risk_level_crossing" (ALRT-04), "top_50_entry" (ALRT-05), "sanctions_match" (ALRT-06), "score_spike" (ALRT-07)
+- [Phase 07]: ALRT-05 two-pass: top_50_before captured from rows[:50] pre-loop; top_50_after from re-query post-loop; fires for top_50_after - top_50_before
+- [Phase 07]: _generate_alerts() only called when prior history exists (guarded by `if prior:`) — no alert fires on first-ever history row
+- [Phase 07]: static/alerts.js uses addEventListener throughout; no onclick injected into JS-generated HTML (CSP compliance)
+- [Phase 07]: IMO range IMO9000001+ reserved for Phase 7 tests (avoids collision with Phases 2-6)
+- [Phase 07]: POST /api/alerts/<id>/read is @csrf.exempt per Phase 4 decision (all /api/* POSTs exempt)
+- [Phase 07]: vessel_name stored as snapshot at alert insert time (deliberate denormalization — consistent with vessel_score_history pattern)
 
 ### Pending Todos
 

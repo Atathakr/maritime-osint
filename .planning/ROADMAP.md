@@ -128,10 +128,12 @@ Plans:
   3. The analyst can open the alert panel and see each unread alert listed with: vessel name, alert type label, score at trigger time, and time elapsed since the alert fired.
   4. Clicking any alert in the panel opens a detail view showing: before and after composite score, before and after risk level, list of indicator names that newly fired, and a "View Vessel" link to the vessel profile.
   5. Clicking "Mark as read" on an individual alert decrements the badge count by one; the alert moves to a "read" section and remains visible there.
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-00-PLAN.md — Wave 0: Create tests/test_alerts.py with 8 failing stubs (ALRT-01 through ALRT-08)
+- [ ] 07-01-PLAN.md — Wave 1: db/alerts.py + schema wiring + __init__ re-exports + _generate_alerts() in scheduler
+- [ ] 07-02-PLAN.md — Wave 2: Three API routes + static/alerts.js + dashboard badge/panel HTML + CSS + all 8 stubs pass
 
 #### Phase 8: Vessel Profile Enrichments
 **Goal**: Surface the vessel's score trajectory and recent changes directly on the profile page, so an analyst arriving via a "View Vessel" link from an alert can immediately see what changed and why without querying the history API manually.
