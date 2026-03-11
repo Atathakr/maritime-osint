@@ -19,6 +19,9 @@
   <div class="header-right">
     <span id="hdr-total" class="text-muted">—</span>
     <a href="/logout">Logout</a>
+    <button id="alert-badge-btn" class="alert-badge-btn hidden" aria-label="Alerts">
+      <span id="alert-badge-count">0</span>
+    </button>
   </div>
 </header>
 
@@ -582,8 +585,20 @@
 
 </main>
 
+<div id="alert-panel" class="alert-panel hidden" role="dialog" aria-label="Alerts">
+  <div class="alert-panel-header">
+    <span class="alert-panel-title">Alerts</span>
+    <button class="alert-panel-close" aria-label="Close alerts">&times;</button>
+  </div>
+  <div id="alert-panel-body">
+    <div class="empty-state">Loading&hellip;</div>
+  </div>
+</div>
+<div id="alert-overlay" class="alert-overlay hidden"></div>
+
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script src="{{ url_for('static', filename='map.js') }}"></script>
 <script src="{{ url_for('static', filename='ranking.js') }}"></script>
+<script src="{{ url_for('static', filename='alerts.js') }}"></script>
 </body>
 </html>
